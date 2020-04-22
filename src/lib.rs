@@ -89,23 +89,20 @@ impl<Key> Slot<Key> {
     }
 }
 impl<Key> Slot<Key>
-where Key: Default
+where Key: Default + Ord + Copy
 {
     fn new() -> Slot<Key> {
         Slot {
             flags: 0,
             data: {
                 let mut v = Vec::with_capacity(64);
-                v.push(Key::default());
+                for _ in 0 .. 64 {
+                    v.push(Key::default());
+                }
                 v
             },
         }
     }
-}
-
-impl<Key> Slot<Key>
-where Key: Ord + Copy
-{
     fn contains(&self, k: &Key) -> (Option<usize>,Option<usize>) { // Key slot idx + Empty slot idx if known
         let n = match self.flags.leading_zeros() {
             t @ _ if t <= 64 => 64 - t,
@@ -272,7 +269,7 @@ pub struct ExploSet<Key> {
 
     tmp_c: usize,
 }
-impl<Key: Default> ExploSet<Key> {
+impl<Key: Default + Ord + Copy> ExploSet<Key> {
     pub fn new() -> ExploSet<Key> {
         ExploSet {
             len: 0,
@@ -283,9 +280,6 @@ impl<Key: Default> ExploSet<Key> {
             tmp_c: 0,
         }
     }
-}
-        
-impl<Key: Ord + Copy> ExploSet<Key> {
     pub fn contains(&mut self, k: &Key) -> bool {
         match self.slot.contains(k) {
             (Some(_),_) => true,
