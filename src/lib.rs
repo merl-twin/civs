@@ -1,7 +1,5 @@
 
 
-type Key = u64;
-
 #[derive(Debug)]
 enum Filled {
     HasSlots,
@@ -80,24 +78,34 @@ impl Flags {
     }*/
 }
 
-
-struct Slot {
+#[derive(Debug)]
+struct Slot<Key>{
     flags: u64,
-    data: [Key; 64],
+    data: Vec<Key>,
 }
-impl Slot {
-    fn new() -> Slot {
-        Slot {
-            flags: 0,
-            data: [
-                0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,
-                0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0
-            ],
-        }
-    }
+impl<Key> Slot<Key> {
     fn size() -> usize {
         64
     }
+}
+impl<Key> Slot<Key>
+where Key: Default
+{
+    fn new() -> Slot<Key> {
+        Slot {
+            flags: 0,
+            data: {
+                let mut v = Vec::with_capacity(64);
+                v.push(Key::default());
+                v
+            },
+        }
+    }
+}
+
+impl<Key> Slot<Key>
+where Key: Ord + Copy
+{
     fn contains(&self, k: &Key) -> (Option<usize>,Option<usize>) { // Key slot idx + Empty slot idx if known
         let n = match self.flags.leading_zeros() {
             t @ _ if t <= 64 => 64 - t,
@@ -144,7 +152,7 @@ impl Slot {
     fn clear(&mut self) {
         self.flags = 0;
     }
-    fn into_multislot(&mut self) -> MultiSlot {
+    fn into_multislot(&mut self) -> MultiSlot<Key> {
         let n = match self.flags.leading_zeros() {
             t @ _ if t <= 64 => 64 - t,
             t @ _ => panic!("Unreachable: {} leading zeroes for u64",t),
@@ -169,18 +177,20 @@ impl Slot {
 }
 
 
-struct MultiSlot {
+struct MultiSlot<Key> {
     _sz: usize,
     empty: bool,
     flags: Flags,
     data: Vec<Key>,
 }
-impl MultiSlot {
-    fn empty(sz: usize) -> MultiSlot {   
+impl<Key> MultiSlot<Key>
+    where Key: Ord
+{
+    fn empty(sz: usize) -> MultiSlot<Key> {   
         MultiSlot {
             _sz: sz,
             empty: true,
-            flags: Flags::nulls(Slot::size() * (0x1 << (sz-1))),
+            flags: Flags::nulls(Slot::<Key>::size() * (0x1 << (sz-1))),
             data: Vec::new(),
         }
     }
@@ -254,16 +264,16 @@ impl MultiSlot {
 }
 
 
-pub struct ExploSet {
+pub struct ExploSet<Key> {
     len: usize,
     _tombs: usize,
-    slot: Slot,
-    data: Vec<MultiSlot>,
+    slot: Slot<Key>,
+    data: Vec<MultiSlot<Key>>,
 
     tmp_c: usize,
 }
-impl ExploSet {
-    pub fn new() -> ExploSet {
+impl<Key: Default> ExploSet<Key> {
+    pub fn new() -> ExploSet<Key> {
         ExploSet {
             len: 0,
             _tombs: 0,
@@ -273,6 +283,9 @@ impl ExploSet {
             tmp_c: 0,
         }
     }
+}
+        
+impl<Key: Ord + Copy> ExploSet<Key> {
     pub fn contains(&mut self, k: &Key) -> bool {
         match self.slot.contains(k) {
             (Some(_),_) => true,
@@ -358,7 +371,7 @@ impl ExploSet {
     }*/
     fn merge_into(&mut self, n: usize) -> Result<(),&'static str> {
         if !self.data[n].empty { return Err("data[n] is not empty"); }
-        let mut cnt = Slot::size();
+        let mut cnt = Slot::<Key>::size();
         for i in 0 .. n {
             if self.data[i].empty { return Err("one of data[0..n] is empty"); }
             cnt += self.data[i].data.len();
@@ -367,7 +380,7 @@ impl ExploSet {
         
         {
             let sl_flags = Flags(vec![self.slot.flags]);
-            for i in 0 .. Slot::size() {
+            for i in 0 .. Slot::<Key>::size() {
                 if sl_flags.get(i) {
                     self.data[n].data.push(self.slot.data[i]);
                 }
