@@ -1,4 +1,5 @@
 
+pub mod clones;
 
 #[derive(Debug)]
 enum Filled {
@@ -13,7 +14,10 @@ impl Flags {
         let mut v = Vec::with_capacity(sz);
         for _ in 0 .. sz { v.push(0); }
         Flags(v)
-    }*/
+}*/
+    fn tmp() -> Flags {
+        Flags(vec![])
+    }
     fn nulls(sz: usize) -> Flags {
         let ln = sz/64 + 1;
         let mut v = Vec::with_capacity(ln);
