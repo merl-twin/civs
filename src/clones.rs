@@ -129,6 +129,8 @@ pub struct CivSet<Key> {
     data: Vec<MultiSlot<Key>>,
 
     tmp_c: usize,
+    tmp_merge_vec: Vec<Key>,
+    tmp_merge_flags: Flags,
 }
 impl<Key: Ord> CivSet<Key> {
     pub fn new() -> CivSet<Key> {
@@ -139,6 +141,8 @@ impl<Key: Ord> CivSet<Key> {
             data: Vec::new(),
 
             tmp_c: 0,
+            tmp_merge_vec: Vec::new(),
+            tmp_merge_flags: Flags::tmp(),
         }
     }
     pub fn contains(&mut self, k: &Key) -> bool {
@@ -209,7 +213,7 @@ impl<Key: Ord> CivSet<Key> {
             }
             self.slot.clear();
 
-            let mut tmp = Vec::new();
+            /*let mut tmp = Vec::new();
             let mut sl_flags = Flags::tmp();
             std::mem::swap(&mut self.data[n].data,&mut tmp);
             for i in 0 .. n {
@@ -222,7 +226,20 @@ impl<Key: Ord> CivSet<Key> {
                 std::mem::swap(&mut self.data[i].flags,&mut sl_flags);
                 self.data[i].clear();
             }
-            std::mem::swap(&mut self.data[n].data,&mut tmp);
+            std::mem::swap(&mut self.data[n].data,&mut tmp);*/
+
+            std::mem::swap(&mut self.data[n].data, &mut self.tmp_merge_vec);
+            for i in 0 .. n {
+                std::mem::swap(&mut self.data[i].flags,&mut self.tmp_merge_flags);
+                for (j,k) in self.data[i].data.drain(..).enumerate() {
+                    if self.tmp_merge_flags.get(j) {
+                        self.tmp_merge_vec.push(k);
+                    }
+                }
+                std::mem::swap(&mut self.data[i].flags,&mut self.tmp_merge_flags);
+                self.data[i].clear();
+            }
+            std::mem::swap(&mut self.data[n].data, &mut self.tmp_merge_vec);
 
             self.data[n].data.sort();
             self.tmp_c += 1;
