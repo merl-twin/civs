@@ -3,7 +3,7 @@
 mod clones;
 
 pub use crate::clones::{
-    CivSet,
+    CivSet, CivMap,
 };
 
 #[derive(Debug)]

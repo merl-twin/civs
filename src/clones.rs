@@ -36,7 +36,7 @@ impl<K: Ord,V> Slot<K,V> {
         }
         (None,empty)
     }
-    fn get(&mut self, k: &K) -> Option<&V> {
+    fn get(&self, k: &K) -> Option<&V> {
         match self.contains(k).0 {
             Some(idx) => Some(&self.data[idx].1),
             None => None,
@@ -139,10 +139,10 @@ impl<K: Ord, V> MultiSlot<K,V> {
     }
 }
 
-pub struct CivSet<K>(CivInner<K,()>);
+pub struct CivSet<K>(CivMap<K,()>);
 impl<K: Ord> CivSet<K> {
     pub fn new() -> CivSet<K> {
-        CivSet(CivInner::new())
+        CivSet(CivMap::new())
     }
     pub fn contains(&mut self, k: &K) -> bool {
         self.0.contains(k)
@@ -157,10 +157,8 @@ impl<K: Ord> CivSet<K> {
         self.0.remove(k).is_some()
     }
 }
-
-
-        
-struct CivInner<K,V> {
+      
+pub struct CivMap<K,V> {
     len: usize,
     _tombs: usize,
     slot: Slot<K,V>,
@@ -171,9 +169,9 @@ struct CivInner<K,V> {
     tmp_merge_flags: Flags,
 }
        
-impl<K: Ord, V> CivInner<K,V> {
-    fn new() -> CivInner<K,V> {
-        CivInner {
+impl<K: Ord, V> CivMap<K,V> {
+    pub fn new() -> CivMap<K,V> {
+        CivMap {
             len: 0,
             _tombs: 0,
             slot: Slot::new(),
@@ -184,13 +182,13 @@ impl<K: Ord, V> CivInner<K,V> {
             tmp_merge_flags: Flags::tmp(),
         }
     }
-    fn contains(&mut self, k: &K) -> bool {
+    pub fn contains(&mut self, k: &K) -> bool {
         match self.slot.contains(k) {
             (Some(_),_) => true,
             (None,_) => self.multy_contains(k).is_some(),
         }
-    }
-    fn multy_contains(&mut self, k: &K) -> Option<(usize,usize)> {
+    }    
+    fn multy_contains(&self, k: &K) -> Option<(usize,usize)> {
         for (n,ms) in self.data.iter().enumerate() {
             if let Some(idx) = ms.contains(k) {
                 return Some((n,idx));
@@ -198,7 +196,22 @@ impl<K: Ord, V> CivInner<K,V> {
         }
         None
     }
-    fn insert(&mut self, k: K, v: V) -> Option<V> {
+    pub fn get(&self, k: &K) -> Option<&V> {
+        match self.slot.get(k) {
+            r @ Some(_) => r,
+            None => match self.multy_contains(k) {
+                Some((msi,idx)) => Some(&self.data[msi].data[idx].1),
+                None => None,
+            }
+        }
+    }
+    pub fn get_mut(&mut self, k: &K) -> Option<&mut V> {
+        match self.multy_contains(k) {
+            Some((msi,idx)) => Some(&mut self.data[msi].data[idx].1),
+            None => self.slot.get_mut(k),
+        }
+    }
+    pub fn insert(&mut self, k: K, v: V) -> Option<V> {
         if let Some((msi,idx)) = self.multy_contains(&k) {
             let mut tmp = v;
             std::mem::swap(&mut tmp, &mut self.data[msi].data[idx].1);
@@ -223,10 +236,10 @@ impl<K: Ord, V> CivInner<K,V> {
         self.len += 1;
         r
     }
-    fn len(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.len
     }
-    fn remove(&mut self, k: &K) -> Option<&V> {
+    pub fn remove(&mut self, k: &K) -> Option<&V> {
         match self.multy_contains(&k) {
             Some((msi,idx)) => {
                 self.data[msi].flags.unset(idx);
