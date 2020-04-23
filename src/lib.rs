@@ -89,30 +89,20 @@ impl<Key> Slot<Key> {
     }
 }
 impl<Key> Slot<Key>
-where Key: Default + Ord + Copy
+where Key: Ord + Copy
 {
     fn new() -> Slot<Key> {
         Slot {
             flags: 0,
-            data: {
-                let mut v = Vec::with_capacity(64);
-                for _ in 0 .. 64 {
-                    v.push(Key::default());
-                }
-                v
-            },
+            data: Vec::with_capacity(64),
         }
     }
     fn contains(&self, k: &Key) -> (Option<usize>,Option<usize>) { // Key slot idx + Empty slot idx if known
-        let n = match self.flags.leading_zeros() {
-            t @ _ if t <= 64 => 64 - t,
-            t @ _ => panic!("Unreachable: {} leading zeroes for u64",t),
-        };
         let mut fl = self.flags;
         let mut empty = None;
-        for i in 0 .. n as usize {
+        for (i,v) in self.data.iter().enumerate() {
             if (fl & 0x1) > 0 {
-                if self.data[i] == *k {
+                if v == k {
                     return (Some(i),empty);
                 }
             } else {
@@ -123,18 +113,20 @@ where Key: Default + Ord + Copy
         (None,empty)
     }
     fn insert(&mut self, k: Key) -> (bool,Filled) {
-        let n = match self.flags.leading_zeros() {
-            t @ _ if t <= 64 => 64 - t,
-            t @ _ => panic!("Unreachable: {} leading zeroes for u64",t),
+        let idx = match self.contains(&k) {
+            (Some(_),_) => return (true,if self.data.len() >= 64 { Filled::Full } else { Filled::HasSlots }),
+            (None,None) => {
+                let idx = self.data.len();
+                self.data.push(k);
+                idx
+            },
+            (None,Some(idx)) => {
+                self.data[idx] = k;
+                idx
+            }
         };
-        let (idx,next_n) = match self.contains(&k) {
-            (Some(_),_) => return (true,if n>=64 { Filled::Full } else { Filled::HasSlots }),
-            (None,None) => (n as usize,n+1),
-            (None,Some(idx)) => (idx,n),
-        };
-        self.data[idx] = k;
         self.flags |= 0x1u64 << idx;
-        (false,if next_n>=64 { Filled::Full } else { Filled::HasSlots })
+        (false,if self.data.len() >= 64 { Filled::Full } else { Filled::HasSlots })
     }
     fn remove(&mut self, k: &Key) -> bool {
         match self.contains(&k) {
@@ -148,17 +140,14 @@ where Key: Default + Ord + Copy
     }
     fn clear(&mut self) {
         self.flags = 0;
+        self.data.clear();
     }
     fn into_multislot(&mut self) -> MultiSlot<Key> {
-        let n = match self.flags.leading_zeros() {
-            t @ _ if t <= 64 => 64 - t,
-            t @ _ => panic!("Unreachable: {} leading zeroes for u64",t),
-        };
-        let mut v = Vec::with_capacity(64);
+        let mut v = Vec::with_capacity(self.data.len());
         let mut fl = self.flags;
-        for i in 0 .. n as usize {
+        for k in self.data.iter() {
             if (fl & 0x1) > 0 {
-                v.push(self.data[i]);
+                v.push(*k);
             }
             fl >>= 1;
         }
@@ -261,7 +250,7 @@ impl<Key> MultiSlot<Key>
 }
 
 
-pub struct ExploSet<Key> {
+pub struct CivSet<Key> {
     len: usize,
     _tombs: usize,
     slot: Slot<Key>,
@@ -269,9 +258,9 @@ pub struct ExploSet<Key> {
 
     tmp_c: usize,
 }
-impl<Key: Default + Ord + Copy> ExploSet<Key> {
-    pub fn new() -> ExploSet<Key> {
-        ExploSet {
+impl<Key: Ord + Copy> CivSet<Key> {
+    pub fn new() -> CivSet<Key> {
+        CivSet {
             len: 0,
             _tombs: 0,
             slot: Slot::new(),
