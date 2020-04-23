@@ -48,9 +48,13 @@ impl<K: Ord,V> Slot<K,V> {
             None => None,
         }
     }
-    fn insert(&mut self, k: K, v: V) -> (bool,Filled) {
+    fn insert(&mut self, k: K, v: V) -> (Option<V>,Filled) {
         let idx = match self.contains(&k) {
-            (Some(_),_) => return (true,if self.data.len() >= 64 { Filled::Full } else { Filled::HasSlots }),
+            (Some(idx),_) => {
+                let mut tmp = v;
+                std::mem::swap(&mut tmp, &mut self.data[idx].1);
+                return (Some(tmp),if self.data.len() >= 64 { Filled::Full } else { Filled::HasSlots });
+            },
             (None,None) => {
                 let idx = self.data.len();
                 self.data.push((k,v));
@@ -62,16 +66,16 @@ impl<K: Ord,V> Slot<K,V> {
             }
         };
         self.flags |= 0x1u64 << idx;
-        (false,if self.data.len() >= 64 { Filled::Full } else { Filled::HasSlots })
+        (None,if self.data.len() >= 64 { Filled::Full } else { Filled::HasSlots })
     }
-    fn remove(&mut self, k: &K) -> bool {
+    fn remove(&mut self, k: &K) -> Option<&V> {
         match self.contains(&k) {
             (Some(idx),_) => {
                 let msk = 0xFFFFFFFFFFFFFFFF - (0x1u64 << idx);
                 self.flags &= msk;
-                true
+                Some(&self.data[idx].1)
             },
-            (None,_) => false,
+            (None,_) => None,
         }
     }
     #[inline]
@@ -111,10 +115,13 @@ impl<K: Ord, V> MultiSlot<K,V> {
         MultiSlot {
             _sz: sz,
             empty: true,
-            flags: Flags::nulls(Slot::<K,V>::max_size() * (0x1 << (sz-1))),
+            flags: {
+                let sz = Slot::<K,V>::max_size();
+                Flags::nulls(sz * (0x1 << (sz-1)))
+            },
             data: Vec::new(),
         }
-    }        
+    }
     fn contains(&self, k: &K) -> Option<usize> {
         if (self.data.len() == 0)||(*k < self.data[0].0)||(*k > self.data[self.data.len()-1].0) { return None; }
         match self.data.binary_search_by_key(&k,|(k,_)|k) {
@@ -131,22 +138,42 @@ impl<K: Ord, V> MultiSlot<K,V> {
         self.data.clear();
     }
 }
-        
 
-pub struct CivSet<K> {
+pub struct CivSet<K>(CivInner<K,()>);
+impl<K: Ord> CivSet<K> {
+    pub fn new() -> CivSet<K> {
+        CivSet(CivInner::new())
+    }
+    pub fn contains(&mut self, k: &K) -> bool {
+        self.0.contains(k)
+    }
+    pub fn insert(&mut self, k: K) -> bool {
+        self.0.insert(k,()).is_some()
+    }
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+    pub fn remove(&mut self, k: &K) -> bool {
+        self.0.remove(k).is_some()
+    }
+}
+
+
+        
+struct CivInner<K,V> {
     len: usize,
     _tombs: usize,
-    slot: Slot<K,()>,
-    data: Vec<MultiSlot<K,()>>,
+    slot: Slot<K,V>,
+    data: Vec<MultiSlot<K,V>>,
 
     tmp_c: usize,
-    tmp_merge_vec: Vec<(K,())>,
+    tmp_merge_vec: Vec<(K,V)>,
     tmp_merge_flags: Flags,
 }
        
-impl<K: Ord> CivSet<K> {
-    pub fn new() -> CivSet<K> {
-        CivSet {
+impl<K: Ord, V> CivInner<K,V> {
+    fn new() -> CivInner<K,V> {
+        CivInner {
             len: 0,
             _tombs: 0,
             slot: Slot::new(),
@@ -157,7 +184,7 @@ impl<K: Ord> CivSet<K> {
             tmp_merge_flags: Flags::tmp(),
         }
     }
-    pub fn contains(&mut self, k: &K) -> bool {
+    fn contains(&mut self, k: &K) -> bool {
         match self.slot.contains(k) {
             (Some(_),_) => true,
             (None,_) => self.multy_contains(k).is_some(),
@@ -171,11 +198,13 @@ impl<K: Ord> CivSet<K> {
         }
         None
     }
-    pub fn insert(&mut self, k: K) -> bool {
-        if self.multy_contains(&k).is_some() {
-            return true;
+    fn insert(&mut self, k: K, v: V) -> Option<V> {
+        if let Some((msi,idx)) = self.multy_contains(&k) {
+            let mut tmp = v;
+            std::mem::swap(&mut tmp, &mut self.data[msi].data[idx].1);
+            return Some(tmp);
         }
-        let (r,filled) = self.slot.insert(k,());
+        let (r,filled) = self.slot.insert(k,v);
         if let Filled::Full = filled {
             if self.data.len() == 0 {
                 self.data.push(self.slot.into_multislot());
@@ -188,19 +217,20 @@ impl<K: Ord> CivSet<K> {
                 if let Err(s) = self.merge_into(n) {
                     panic!("Unreachable merge_into: {}",s);
                 }
+                // TODO: Check size (cause of removed) 
             }
         }
         self.len += 1;
         r
     }
-    pub fn len(&self) -> usize {
+    fn len(&self) -> usize {
         self.len
     }
-    pub fn remove(&mut self, k: &K) -> bool {
+    fn remove(&mut self, k: &K) -> Option<&V> {
         match self.multy_contains(&k) {
             Some((msi,idx)) => {
                 self.data[msi].flags.unset(idx);
-                true
+                Some(&self.data[msi].data[idx].1)
             },
             None => {
                 self.slot.remove(k)
@@ -238,7 +268,7 @@ impl<K: Ord> CivSet<K> {
             }
             std::mem::swap(&mut self.data[n].data, &mut self.tmp_merge_vec);
 
-            self.data[n].data.sort();
+            self.data[n].data.sort_by(|(k1,_),(k2,_)|k1.cmp(k2));
             self.tmp_c += 1;
         }
         
