@@ -79,16 +79,16 @@ impl<K: Ord,V> Slot<K,V> {
         self.flags = 0;
         self.data.clear();
     }
-    fn into_multislot(&mut self) -> MultiSlot<K> {
+    fn into_multislot(&mut self) -> MultiSlot<K,V> {
         let mut vc = Vec::with_capacity(self.flags.count_ones() as usize);
         let mut fl = self.flags;
         for (k,v) in self.data.drain(..) {
             if (fl & 0x1) > 0 {
-                vc.push(k);
+                vc.push((k,v));
             }
             fl >>= 1;
         }
-        vc.sort();
+        vc.sort_by(|(k1,_),(k2,_)|k1.cmp(k2));
         self.clear();
         MultiSlot {
             _sz: 1,
@@ -100,24 +100,24 @@ impl<K: Ord,V> Slot<K,V> {
 }
 
 
-struct MultiSlot<K> {
+struct MultiSlot<K,V> {
     _sz: usize,
     empty: bool,
     flags: Flags,
-    data: Vec<K>,
+    data: Vec<(K,V)>,
 }
-impl<K: Ord> MultiSlot<K> {
-    fn empty(sz: usize) -> MultiSlot<K> {   
+impl<K: Ord, V> MultiSlot<K,V> {
+    fn empty(sz: usize) -> MultiSlot<K,V> {   
         MultiSlot {
             _sz: sz,
             empty: true,
-            flags: Flags::nulls(Slot::<K,()>::max_size() * (0x1 << (sz-1))),
+            flags: Flags::nulls(Slot::<K,V>::max_size() * (0x1 << (sz-1))),
             data: Vec::new(),
         }
     }        
     fn contains(&self, k: &K) -> Option<usize> {
-        if (self.data.len() == 0)||(*k < self.data[0])||(*k > self.data[self.data.len()-1]) { return None; }
-        match self.data.binary_search(k) {
+        if (self.data.len() == 0)||(*k < self.data[0].0)||(*k > self.data[self.data.len()-1].0) { return None; }
+        match self.data.binary_search_by_key(&k,|(k,_)|k) {
             Ok(idx) => match self.flags.get(idx) {
                 true => Some(idx),
                 false => None,
@@ -137,10 +137,10 @@ pub struct CivSet<K> {
     len: usize,
     _tombs: usize,
     slot: Slot<K,()>,
-    data: Vec<MultiSlot<K>>,
+    data: Vec<MultiSlot<K,()>>,
 
     tmp_c: usize,
-    tmp_merge_vec: Vec<K>,
+    tmp_merge_vec: Vec<(K,())>,
     tmp_merge_flags: Flags,
 }
        
@@ -218,9 +218,9 @@ impl<K: Ord> CivSet<K> {
         
         {
             let sl_flags = Flags(vec![self.slot.flags]);
-            for (i,(k,_)) in self.slot.data.drain(..).enumerate() {
+            for (i,p) in self.slot.data.drain(..).enumerate() {
                 if sl_flags.get(i) {
-                    self.data[n].data.push(k);
+                    self.data[n].data.push(p);
                 }
             }
             self.slot.clear();
