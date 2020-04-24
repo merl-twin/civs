@@ -15,7 +15,7 @@ impl<K: Ord> SetMultiSlot<K> {
         SetMultiSlot {
             _sz: sz,
             empty: true,
-            flags: Flags::nulls(sz * (0x1 << (slot_sz-1))),
+            flags: Flags::nulls(slot_sz * (0x1 << (sz-1))),
             data: Vec::new(),
         }
     }

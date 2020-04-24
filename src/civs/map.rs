@@ -77,11 +77,10 @@ impl<K: Ord, V> MapMultiSlot<K,V> {
         }
     }
     fn empty(sz: usize, slot_sz: usize) -> MapMultiSlot<K,V> {
-        println!("{} {}",sz,slot_sz);
         MapMultiSlot {
             _sz: sz,
             empty: true,
-            flags: Flags::nulls(sz * (0x1 << (slot_sz-1))),
+            flags: Flags::nulls(slot_sz * (0x1 << (sz-1))),
             keys: Vec::new(),
             values: Vec::new(),
         }
