@@ -42,6 +42,9 @@ impl<K: Ord> SetMultiSlot<K> {
         self.flags.set_nulls();
         self.data.clear();
     }
+    fn shrink_to_fit(&mut self) {
+        self.data.shrink_to_fit();
+    }
 }
 
 pub struct CivSet<K> {
@@ -121,6 +124,11 @@ impl<K: Ord> CivSet<K> {
                 true
             },
             None => self.slot.remove(k).is_some(),
+        }
+    }
+    pub fn shrink_to_fit(&mut self) {
+        for ms in &mut self.data {
+            ms.shrink_to_fit();
         }
     }
     fn merge_into(&mut self, n: usize) -> Result<(),&'static str> {

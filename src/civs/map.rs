@@ -101,6 +101,10 @@ impl<K: Ord, V> MapMultiSlot<K,V> {
         self.keys.clear();
         self.values.clear();
     }
+    fn shrink_to_fit(&mut self) {
+        self.keys.shrink_to_fit();
+        self.values.shrink_to_fit();
+    }
     fn reserve(&mut self, cnt: usize) {
         self.keys.reserve(cnt);
         self.values.reserve(cnt);
@@ -259,6 +263,11 @@ impl<K: Ord, V> CivMap<K,V> {
                 Some(v) => Some(RemovedItem::Owned(v)),
                 None => None,
             },
+        }
+    }
+    pub fn shrink_to_fit(&mut self) {
+        for ms in &mut self.data {
+            ms.shrink_to_fit();
         }
     }
     fn check_tombs(&mut self, n: usize) -> Result<(),&'static str> {
