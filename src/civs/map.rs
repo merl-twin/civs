@@ -1,3 +1,4 @@
+use serde::{Serialize,Deserialize};
 
 use crate::{
     Flags,Filled,
@@ -52,9 +53,9 @@ impl<'t,V: Clone> RemovedItem<'t,V> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone,Serialize,Deserialize)]
 pub(crate) struct MapMultiSlot<K,V> {
-    _sz: usize,
+    sz: usize,
     empty: bool,
     flags: Flags,
     keys: Vec<K>,
@@ -70,7 +71,7 @@ impl<K: Ord, V> MapMultiSlot<K,V> {
             values.push(v);
         }
         MapMultiSlot {
-            _sz: 1,
+            sz: 1,
             empty: len == 0,
             flags: Flags::ones(len),
             keys: keys,
@@ -79,7 +80,7 @@ impl<K: Ord, V> MapMultiSlot<K,V> {
     }
     fn empty(sz: usize, slot_sz: usize) -> MapMultiSlot<K,V> {
         MapMultiSlot {
-            _sz: sz,
+            sz: sz,
             empty: true,
             flags: Flags::nulls(slot_sz * (0x1 << (sz-1))),
             keys: Vec::new(),
@@ -167,15 +168,16 @@ impl<'t,K,V> Iterator for MapMultiSlotDrainIterator<'t,K,V> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone,Serialize,Deserialize)]
 pub struct CivMap<K,V> {
     len: usize,
     tombs: usize,
     slot: Slot<K,V>,
     data: Vec<MapMultiSlot<K,V>>,
 
-    tmp_c: usize,
+    #[serde(default = "Vec::new")]
     tmp_merge_keys: Vec<K>,
+    #[serde(default = "Vec::new")]
     tmp_merge_values: Vec<V>,
 }
        
@@ -187,7 +189,6 @@ impl<K: Ord, V> CivMap<K,V> {
             slot: Slot::new(),
             data: Vec::new(),
 
-            tmp_c: 0,
             tmp_merge_keys: Vec::new(),
             tmp_merge_values: Vec::new(),
         }
@@ -448,7 +449,6 @@ impl<K: Ord, V> CivMap<K,V> {
             for i in 0 .. n {
                 self.data[i].clear();
             }
-            self.tmp_c += 1;
         }
         std::mem::swap(&mut self.data[n].keys, &mut self.tmp_merge_keys);
         std::mem::swap(&mut self.data[n].values, &mut self.tmp_merge_values);

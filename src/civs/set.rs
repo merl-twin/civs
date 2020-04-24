@@ -1,10 +1,11 @@
+use serde::{Serialize,Deserialize};
 
 use crate::{
     Flags,Filled,
     civs::{Slot,TOMBS_LIMIT},
 };
 
-#[derive(Clone)]
+#[derive(Clone,Serialize,Deserialize)]
 pub(crate) struct SetMultiSlot<K> {
     _sz: usize,
     empty: bool,
@@ -48,7 +49,7 @@ impl<K: Ord> SetMultiSlot<K> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone,Serialize,Deserialize)]
 pub struct CivSet<K> {
     len: usize,
     tombs: usize,

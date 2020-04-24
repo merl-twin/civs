@@ -1,3 +1,5 @@
+use serde::{Serialize,Deserialize};
+
 use crate::Filled;
 
 pub(crate) mod set;
@@ -10,7 +12,7 @@ use map::MapMultiSlot;
 pub(crate) const TOMBS_LIMIT: f64 = 0.25;
 
 
-#[derive(Debug,Clone)]
+#[derive(Debug,Clone,Serialize,Deserialize)]
 struct Slot<K,V>{
     size: usize,
     data: Vec<(K,V)>,

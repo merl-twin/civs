@@ -1,4 +1,4 @@
-
+use serde::{Serialize,Deserialize};
 
 mod civs;
 
@@ -13,7 +13,7 @@ enum Filled {
     Full,
 }
 
-#[derive(Debug,Clone)]
+#[derive(Debug,Clone,Serialize,Deserialize)]
 struct Flags(Vec<u64>);
 impl Flags {
     /*fn new64(sz: usize) -> Flags {
