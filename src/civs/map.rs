@@ -76,7 +76,8 @@ impl<K: Ord, V> MapMultiSlot<K,V> {
             values: values,
         }
     }
-    fn empty(sz: usize, slot_sz: usize) -> MapMultiSlot<K,V> {   
+    fn empty(sz: usize, slot_sz: usize) -> MapMultiSlot<K,V> {
+        println!("{} {}",sz,slot_sz);
         MapMultiSlot {
             _sz: sz,
             empty: true,
