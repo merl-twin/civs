@@ -1,9 +1,10 @@
 
 
-mod clones;
+mod civs;
 
-pub use crate::clones::{
-    CivSet, CivMap, RemovedItem,
+pub use crate::civs::{
+    set::CivSet,
+    map::{CivMap,RemovedItem},
 };
 
 #[derive(Debug)]
