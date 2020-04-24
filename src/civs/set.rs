@@ -1,7 +1,7 @@
 
 use crate::{
     Flags,Filled,
-    civs::Slot,
+    civs::{Slot,TOMBS_LIMIT},
 };
 
 pub(crate) struct SetMultiSlot<K> {
@@ -11,14 +11,11 @@ pub(crate) struct SetMultiSlot<K> {
     data: Vec<K>,
 }
 impl<K: Ord> SetMultiSlot<K> {
-    fn empty(sz: usize) -> SetMultiSlot<K> {   
+    fn empty(sz: usize, slot_sz: usize) -> SetMultiSlot<K> {   
         SetMultiSlot {
             _sz: sz,
             empty: true,
-            flags: {
-                let sz = Slot::<K,()>::max_size();
-                Flags::nulls(sz * (0x1 << (sz-1)))
-            },
+            flags: Flags::nulls(sz * (0x1 << (slot_sz-1))),
             data: Vec::new(),
         }
     }
@@ -97,12 +94,14 @@ impl<K: Ord> CivSet<K> {
                 let mut n = 0;
                 while (n < self.data.len())&&(!self.data[n].empty) { n += 1; }
                 if n == self.data.len() {
-                    self.data.push(SetMultiSlot::empty(n+1));
+                    self.data.push(SetMultiSlot::empty(n+1,self.slot.max_size()));
                 }
                 if let Err(s) = self.merge_into(n) {
                     panic!("Unreachable merge_into: {}",s);
                 }
-                // TODO: Check size (cause of removed) 
+                if let Err(s) = self.check_tombs(n) {
+                    panic!("Unreachable check_tombs: {}",s);
+                }
             }
         }
         self.len += 1;
@@ -160,6 +159,67 @@ impl<K: Ord> CivSet<K> {
         self.data[n].empty = false;
         let c = self.data[n].data.len();
         self.data[n].flags.set_ones(c);
+        Ok(())
+    }
+    fn check_tombs(&mut self, n: usize) -> Result<(),&'static str> {
+        if self.data[n].empty { return Err("data[n] is empty"); }
+        for i in 0 .. n {
+            if !self.data[i].empty { return Err("one of data[0..n] is not empty"); }
+        }
+
+        let sz =  self.slot.max_size();
+        let local_tombs = self.data[n].data.capacity() - self.data[n].data.len();
+        let local_part = (local_tombs as f64) / (self.data[n].data.capacity() as f64);
+        if (local_tombs > sz) && (local_part > TOMBS_LIMIT) {
+            std::mem::swap(&mut self.data[n].data, &mut self.tmp_merge_vec);
+            {
+                let mut count = self.tmp_merge_vec.len();
+                let mut iter = self.tmp_merge_vec.drain(..);
+
+                let mut msi = self.data[..n].iter_mut();
+                while let Some(ms) = msi.next_back() {
+                    let cap = ms.data.capacity();
+                    if count >= cap {
+                        for _ in 0 .. cap {
+                            if let Some(k) = iter.next() {
+                                ms.data.push(k);
+                            }
+                        }
+                        ms.empty = false;
+                        if ms.data.len() != cap {
+                            return Err("data count < data.len()");
+                        }
+                        ms.flags.set_ones(cap);
+                        count -= cap;
+                        if count == 0 { break; }
+                        continue;
+                    }
+                    if (cap - count) > sz { continue; }
+                    // checked tombs = (cap - count) <= sz and local_tombs > sz
+                    let d_tombs = local_tombs - (cap - count);
+                    for _ in 0 .. count {
+                        if let Some(k) = iter.next() {
+                            ms.data.push(k);
+                        }
+                    }
+                    ms.empty = false;
+                    if ms.data.len() != count {
+                        return Err("data count < data.len()");
+                    }
+                    ms.flags.set_ones(count);
+                    if d_tombs > self.tombs {
+                        return Err("local_tombs > self.tombs");
+                    }
+                    self.tombs -= d_tombs;
+                    break;
+                }
+                if let Some(_) = iter.next() {
+                    return Err("merged data greater then the sum of the parts");
+                }
+            }
+            std::mem::swap(&mut self.data[n].data, &mut self.tmp_merge_vec);
+            self.data[n].clear();
+        }
         Ok(())
     }
 }

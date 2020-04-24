@@ -7,22 +7,34 @@ use set::SetMultiSlot;
 use map::MapMultiSlot;
 
 
+pub(crate) const TOMBS_LIMIT: f64 = 0.25;
+
+
 #[derive(Debug)]
 struct Slot<K,V>{
+    size: usize,
     data: Vec<(K,V)>,
 }
 impl<K,V> Slot<K,V> {
     fn len(&self) -> usize {
         self.data.len()
     }
-    fn max_size() -> usize {
-        64
+    fn max_size(&self) -> usize {
+        self.size
     }
 }
 impl<K: Ord,V> Slot<K,V> {
     fn new() -> Slot<K,V> {
         Slot {
+            size: 64,
             data: Vec::with_capacity(64),
+        }
+    }
+    #[cfg(test)]
+    fn test(s: usize) -> Slot<K,V> {
+        Slot {
+            size: s,
+            data: Vec::with_capacity(s),
         }
     }
     fn contains(&self, k: &K) -> Option<usize> { // Key slot idx 
@@ -57,7 +69,7 @@ impl<K: Ord,V> Slot<K,V> {
                 None
             },
         };
-        (opt_v,if self.data.len() >= 64 { Filled::Full } else { Filled::HasSlots })
+        (opt_v,if self.data.len() >= self.size { Filled::Full } else { Filled::HasSlots })
     }
     fn remove(&mut self, k: &K) -> Option<V> {
         match self.contains(&k) {
@@ -65,9 +77,12 @@ impl<K: Ord,V> Slot<K,V> {
             None => None,
         }
     }
-    #[inline]
     fn clear(&mut self) {
         self.data.clear();
+    }
+    fn sorted_drain(&mut self) -> std::vec::Drain<(K,V)> {
+        self.data.sort_by(|(k1,_),(k2,_)|k1.cmp(k2));
+        self.data.drain(..)
     }
     fn into_map_multislot(&mut self) -> MapMultiSlot<K,V> {
         self.data.sort_by(|(k1,_),(k2,_)|k1.cmp(k2));
