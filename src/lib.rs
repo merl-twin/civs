@@ -25,13 +25,15 @@ impl Flags {
         Flags(vec![])
     }
     fn nulls(sz: usize) -> Flags {
-        let ln = sz/64 + 1;
+        if sz == 0 { return Flags(Vec::new()); }
+        let ln = 1 + (sz-1)/64;
         let mut v = Vec::with_capacity(ln);
         for _ in 0 .. ln { v.push(0); }
         Flags(v)
     }
     fn ones(sz: usize) -> Flags {
-        let ln = sz/64 + 1;
+        if sz == 0 { return Flags(Vec::new()); }
+        let ln = 1 + (sz-1)/64;
         let mut v = Vec::with_capacity(ln);
         let mut s = sz;
         for _ in 0 .. ln {
@@ -51,7 +53,7 @@ impl Flags {
         }
     }
     fn set_ones(&mut self, sz: usize) {
-        let ln = sz/64 + 1;
+        let ln = 1 + (sz-1)/64;
         while self.0.len() < ln { self.0.push(0); }
         let mut s = sz;
         for i in 0 .. ln {
