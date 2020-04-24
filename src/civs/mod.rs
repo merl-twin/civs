@@ -10,7 +10,7 @@ use map::MapMultiSlot;
 pub(crate) const TOMBS_LIMIT: f64 = 0.25;
 
 
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 struct Slot<K,V>{
     size: usize,
     data: Vec<(K,V)>,

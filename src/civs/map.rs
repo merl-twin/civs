@@ -52,6 +52,7 @@ impl<'t,V: Clone> RemovedItem<'t,V> {
     }
 }
 
+#[derive(Clone)]
 pub(crate) struct MapMultiSlot<K,V> {
     _sz: usize,
     empty: bool,
@@ -165,7 +166,8 @@ impl<'t,K,V> Iterator for MapMultiSlotDrainIterator<'t,K,V> {
         self.iter.next()
     }
 }
-      
+
+#[derive(Clone)]
 pub struct CivMap<K,V> {
     len: usize,
     tombs: usize,

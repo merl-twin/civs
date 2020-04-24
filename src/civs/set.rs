@@ -4,6 +4,7 @@ use crate::{
     civs::{Slot,TOMBS_LIMIT},
 };
 
+#[derive(Clone)]
 pub(crate) struct SetMultiSlot<K> {
     _sz: usize,
     empty: bool,
@@ -47,6 +48,7 @@ impl<K: Ord> SetMultiSlot<K> {
     }
 }
 
+#[derive(Clone)]
 pub struct CivSet<K> {
     len: usize,
     tombs: usize,
