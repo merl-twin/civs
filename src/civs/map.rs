@@ -193,6 +193,9 @@ impl<K: Ord, V> CivMap<K,V> {
             tmp_merge_values: Vec::new(),
         }
     }
+    pub fn capacities(&self) -> Vec<usize> {
+        self.data.iter().map(|ms|ms.keys.capacity()).collect()
+    }
     pub fn contains(&mut self, k: &K) -> bool {
         match self.slot.contains(k) {
             Some(_) => true,
