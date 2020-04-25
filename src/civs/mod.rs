@@ -1,4 +1,4 @@
-use serde::{Serialize,Deserialize};
+use serde::{Serialize,Deserialize,ser::{Serializer,SerializeStruct}};
 
 use crate::Filled;
 
@@ -12,7 +12,42 @@ use map::MapMultiSlot;
 pub(crate) const TOMBS_LIMIT: f64 = 0.25;
 
 
-#[derive(Debug,Clone,Serialize,Deserialize)]
+#[derive(Deserialize)]
+struct SerdeSlot<K,V> {
+    size: usize,
+    key_size: usize,
+    value_size: usize,
+    data: Vec<(K,V)>,
+}
+impl<K,V> std::convert::TryFrom<SerdeSlot<K,V>> for Slot<K,V> {
+    type Error = String;
+    fn try_from(slot: SerdeSlot<K,V>) -> Result<Slot<K,V>,String> {
+        if slot.key_size != std::mem::size_of::<K>() { return Err(format!("Unvalid key size {}, must be {}",std::mem::size_of::<K>(),slot.key_size)); }
+        if slot.value_size != std::mem::size_of::<V>() { return Err(format!("Unvalid value size {}, must be {}",std::mem::size_of::<V>(),slot.value_size)); }
+        Ok(Slot {
+            size: slot.size,
+            data: slot.data,
+        })
+    }
+}
+
+impl<K, V> Serialize for Slot<K,V>
+where
+    K: Serialize,
+    V: Serialize,
+{
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut state = serializer.serialize_struct("SerdeMapMultiSlot", 4)?;
+        state.serialize_field("size", &self.size)?;
+        state.serialize_field("key_size", &std::mem::size_of::<K>())?;
+        state.serialize_field("value_size", &std::mem::size_of::<V>())?;
+        state.serialize_field("data", &self.data)?;
+        state.end()
+    }
+}
+
+#[derive(Debug,Clone,Deserialize)]
+#[serde(try_from = "SerdeSlot<K,V>")]
 struct Slot<K,V>{
     size: usize,
     data: Vec<(K,V)>,
