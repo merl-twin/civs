@@ -1,33 +1,71 @@
-use serde::{Serialize,Deserialize};
+use serde::{Serialize,Deserialize,ser::{Serializer,SerializeStruct}};
 
 use crate::{
     Flags,Filled,
     civs::{Slot,TOMBS_LIMIT},
 };
 
-#[derive(Clone,Serialize,Deserialize)]
+#[derive(Deserialize)]
+struct SerdeSetMultiSlot<K> {
+    capacity: usize,
+    data_size: usize,
+    flags: Vec<u64>,
+    data: Vec<K>,
+}
+impl<K> std::convert::TryFrom<SerdeSetMultiSlot<K>> for SetMultiSlot<K> {
+    type Error = String;
+    fn try_from(mut slot: SerdeSetMultiSlot<K>) -> Result<SetMultiSlot<K>,String> {
+        if slot.data_size != std::mem::size_of::<K>() { return Err(format!("Unvalid data size {}, must be {}",std::mem::size_of::<K>(),slot.data_size)); }
+        if slot.data.len() < slot.capacity {
+            slot.data.reserve(slot.capacity - slot.data.len());
+        }
+        Ok(SetMultiSlot {
+            capacity: slot.capacity,
+            flags: Flags(slot.flags),
+            data: slot.data,
+        })
+    }
+}
+
+impl<K> Serialize for SetMultiSlot<K>
+where
+    K: Serialize,
+{
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut state = serializer.serialize_struct("SerdeMapMultiSlot", 4)?;
+        state.serialize_field("capacity", &self.capacity)?;
+        state.serialize_field("data_size", &std::mem::size_of::<K>())?;
+        state.serialize_field("flags", &self.flags)?;
+        state.serialize_field("data", &self.data)?;
+        state.end()
+    }
+}
+
+#[derive(Clone,Deserialize)]
+#[serde(try_from = "SerdeSetMultiSlot<K>")]
 pub(crate) struct SetMultiSlot<K> {
-    _sz: usize,
-    empty: bool,
+    capacity: usize,
     flags: Flags,
     data: Vec<K>,
 }
 impl<K: Ord> SetMultiSlot<K> {
-    fn empty(sz: usize, slot_sz: usize) -> SetMultiSlot<K> {   
+    fn new_empty(sz: usize, slot_sz: usize) -> SetMultiSlot<K> {
+        let cap = slot_sz * (0x1 << (sz-1));
         SetMultiSlot {
-            _sz: sz,
-            empty: true,
-            flags: Flags::nulls(slot_sz * (0x1 << (sz-1))),
-            data: Vec::new(),
+            capacity: cap,
+            flags: Flags::nulls(cap),
+            data: Vec::with_capacity(cap),
         }
     }
     pub(crate) fn new(data: Vec<K>) -> SetMultiSlot<K> {
         SetMultiSlot {
-            _sz: 1,
-            empty: data.len() == 0,
+            capacity: data.len(),
             flags: Flags::ones(data.len()),
             data: data,
         }
+    }
+    fn empty(&self) -> bool {
+        self.data.len() == 0
     }
     fn contains(&self, k: &K) -> Option<usize> {
         if (self.data.len() == 0)||(*k < self.data[0])||(*k > self.data[self.data.len()-1]) { return None; }
@@ -40,7 +78,6 @@ impl<K: Ord> SetMultiSlot<K> {
         }
     }            
     fn clear(&mut self) {
-        self.empty = true;
         self.flags.set_nulls();
         self.data.clear();
     }
@@ -98,9 +135,9 @@ impl<K: Ord> CivSet<K> {
                 self.data.push(self.slot.into_set_multislot());
             } else {
                 let mut n = 0;
-                while (n < self.data.len())&&(!self.data[n].empty) { n += 1; }
+                while (n < self.data.len())&&(!self.data[n].empty()) { n += 1; }
                 if n == self.data.len() {
-                    self.data.push(SetMultiSlot::empty(n+1,self.slot.max_size()));
+                    self.data.push(SetMultiSlot::new_empty(n+1,self.slot.max_size()));
                 }
                 if let Err(s) = self.merge_into(n) {
                     panic!("Unreachable merge_into: {}",s);
@@ -135,10 +172,10 @@ impl<K: Ord> CivSet<K> {
         }
     }
     fn merge_into(&mut self, n: usize) -> Result<(),&'static str> {
-        if !self.data[n].empty { return Err("data[n] is not empty"); }
+        if !self.data[n].empty() { return Err("data[n] is not empty"); }
         let mut cnt = self.slot.len();
         for i in 0 .. n {
-            if self.data[i].empty { return Err("one of data[0..n] is empty"); }
+            if self.data[i].empty() { return Err("one of data[0..n] is empty"); }
             cnt += self.data[i].data.len();
         }
         self.data[n].data.reserve(cnt);
@@ -166,16 +203,14 @@ impl<K: Ord> CivSet<K> {
             self.tmp_c += 1;
         }
         
-        
-        self.data[n].empty = false;
         let c = self.data[n].data.len();
         self.data[n].flags.set_ones(c);
         Ok(())
     }
     fn check_tombs(&mut self, n: usize) -> Result<(),&'static str> {
-        if self.data[n].empty { return Err("data[n] is empty"); }
+        if self.data[n].empty() { return Err("data[n] is empty"); }
         for i in 0 .. n {
-            if !self.data[i].empty { return Err("one of data[0..n] is not empty"); }
+            if !self.data[i].empty() { return Err("one of data[0..n] is not empty"); }
         }
 
         let sz =  self.slot.max_size();
@@ -196,7 +231,6 @@ impl<K: Ord> CivSet<K> {
                                 ms.data.push(k);
                             }
                         }
-                        ms.empty = false;
                         if ms.data.len() != cap {
                             return Err("data count < data.len()");
                         }
@@ -213,7 +247,6 @@ impl<K: Ord> CivSet<K> {
                             ms.data.push(k);
                         }
                     }
-                    ms.empty = false;
                     if ms.data.len() != count {
                         return Err("data count < data.len()");
                     }
