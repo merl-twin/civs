@@ -99,7 +99,7 @@ where
     }
 }
 
-#[derive(Clone,Deserialize)]
+#[derive(Debug,Clone,Deserialize)]
 #[serde(try_from = "SerdeMapMultiSlot<K,V>")]
 pub(crate) struct MapMultiSlot<K,V> {
     capacity: usize,
@@ -221,12 +221,23 @@ pub struct CivMap<K,V> {
     slot: Slot<K,V>,
     data: Vec<MapMultiSlot<K,V>>,
 
+    #[serde(skip_serializing)]
     #[serde(default = "Vec::new")]
     tmp_merge_keys: Vec<K>,
+    #[serde(skip_serializing)]
     #[serde(default = "Vec::new")]
     tmp_merge_values: Vec<V>,
 }
-       
+impl<K: std::fmt::Debug, V: std::fmt::Debug> std::fmt::Debug for CivMap<K,V> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CivMap")
+            .field("len", &self.len)
+            .field("tombs", &self.tombs)
+            .field("slot", &self.slot)
+            .field("data", &self.data)
+            .finish()
+    }
+}     
 impl<K: Ord, V> CivMap<K,V> {
     pub fn new() -> CivMap<K,V> {
         CivMap {

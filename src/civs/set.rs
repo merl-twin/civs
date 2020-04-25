@@ -41,7 +41,7 @@ where
     }
 }
 
-#[derive(Clone,Deserialize)]
+#[derive(Debug,Clone,Deserialize)]
 #[serde(try_from = "SerdeSetMultiSlot<K>")]
 pub(crate) struct SetMultiSlot<K> {
     capacity: usize,
@@ -93,11 +93,23 @@ pub struct CivSet<K> {
     slot: Slot<K,()>,
     data: Vec<SetMultiSlot<K>>,
 
-    tmp_c: usize,
+    #[serde(skip_serializing)]
+    #[serde(default = "Vec::new")]
     tmp_merge_vec: Vec<K>,
+    #[serde(skip_serializing)]
+    #[serde(default = "Flags::tmp")]
     tmp_merge_flags: Flags,
 }
-       
+impl<K: std::fmt::Debug> std::fmt::Debug for CivSet<K> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CivSet")
+            .field("len", &self.len)
+            .field("tombs", &self.tombs)
+            .field("slot", &self.slot)
+            .field("data", &self.data)
+            .finish()
+    }
+}
 impl<K: Ord> CivSet<K> {
     pub fn new() -> CivSet<K> {
         CivSet {
@@ -106,7 +118,6 @@ impl<K: Ord> CivSet<K> {
             slot: Slot::new(),
             data: Vec::new(),
 
-            tmp_c: 0,
             tmp_merge_vec: Vec::new(),
             tmp_merge_flags: Flags::tmp(),
         }
@@ -200,7 +211,6 @@ impl<K: Ord> CivSet<K> {
             std::mem::swap(&mut self.data[n].data, &mut self.tmp_merge_vec);
 
             self.data[n].data.sort();
-            self.tmp_c += 1;
         }
         
         let c = self.data[n].data.len();
