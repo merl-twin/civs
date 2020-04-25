@@ -1,4 +1,4 @@
-use serde::{Serialize,Deserialize};
+use serde::{Serialize,Deserialize,ser::{Serializer,SerializeStruct}};
 
 use crate::{
     Flags,Filled,
@@ -53,10 +53,56 @@ impl<'t,V: Clone> RemovedItem<'t,V> {
     }
 }
 
-#[derive(Clone,Serialize,Deserialize)]
+#[derive(Deserialize)]
+struct SerdeMapMultiSlot<K,V> {
+    capacity: usize,
+    key_size: usize,
+    value_size: usize,
+    flags: Vec<u64>,
+    keys: Vec<K>,
+    values: Vec<V>,
+}
+impl<K,V> std::convert::TryFrom<SerdeMapMultiSlot<K,V>> for MapMultiSlot<K,V> {
+    type Error = String;
+    fn try_from(mut slot: SerdeMapMultiSlot<K,V>) -> Result<MapMultiSlot<K,V>,String> {
+        if slot.key_size != std::mem::size_of::<K>() { return Err(format!("Unvalid key size {}, must be {}",std::mem::size_of::<K>(),slot.key_size)); }
+        if slot.value_size != std::mem::size_of::<V>() { return Err(format!("Unvalid value size {}, must be {}",std::mem::size_of::<V>(),slot.value_size)); }
+        if slot.keys.len() < slot.capacity {
+            slot.keys.reserve(slot.capacity - slot.keys.len());
+        }
+        if slot.values.len() < slot.capacity {
+            slot.values.reserve(slot.capacity - slot.values.len());
+        }
+        Ok(MapMultiSlot {
+            capacity: slot.capacity,
+            flags: Flags(slot.flags),
+            keys: slot.keys,
+            values: slot.values,
+        })
+    }
+}
+
+impl<K, V> Serialize for MapMultiSlot<K,V>
+where
+    K: Serialize,
+    V: Serialize,
+{
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut state = serializer.serialize_struct("SerdeMapMultiSlot", 6)?;
+        state.serialize_field("capacity", &self.capacity)?;
+        state.serialize_field("key_size", &std::mem::size_of::<K>())?;
+        state.serialize_field("value_size", &std::mem::size_of::<V>())?;
+        state.serialize_field("flags", &self.flags)?;
+        state.serialize_field("keys", &self.keys)?;
+        state.serialize_field("values", &self.values)?;
+        state.end()
+    }
+}
+
+#[derive(Clone,Deserialize)]
+#[serde(try_from = "SerdeMapMultiSlot<K,V>")]
 pub(crate) struct MapMultiSlot<K,V> {
-    sz: usize,
-    empty: bool,
+    capacity: usize,
     flags: Flags,
     keys: Vec<K>,
     values: Vec<V>,
@@ -71,21 +117,23 @@ impl<K: Ord, V> MapMultiSlot<K,V> {
             values.push(v);
         }
         MapMultiSlot {
-            sz: 1,
-            empty: len == 0,
+            capacity: len,
             flags: Flags::ones(len),
             keys: keys,
             values: values,
         }
     }
-    fn empty(sz: usize, slot_sz: usize) -> MapMultiSlot<K,V> {
+    fn new_empty(sz: usize, slot_sz: usize) -> MapMultiSlot<K,V> {
+        let cap = slot_sz * (0x1 << (sz-1));
         MapMultiSlot {
-            sz: sz,
-            empty: true,
-            flags: Flags::nulls(slot_sz * (0x1 << (sz-1))),
-            keys: Vec::new(),
-            values: Vec::new(),
+            capacity: cap,
+            flags: Flags::nulls(cap),
+            keys: Vec::with_capacity(cap),
+            values: Vec::with_capacity(cap),
         }
+    }
+    fn empty(&self) -> bool {
+        self.keys.len() == 0
     }
     fn contains(&self, k: &K) -> Option<usize> {
         if (self.keys.len() == 0)||(*k < self.keys[0])||(*k > self.keys[self.keys.len()-1]) { return None; }
@@ -98,7 +146,6 @@ impl<K: Ord, V> MapMultiSlot<K,V> {
         }
     }            
     fn clear(&mut self) {
-        self.empty = true;
         self.flags.set_nulls();
         self.keys.clear();
         self.values.clear();
@@ -124,8 +171,7 @@ impl<K: Ord, V> MapMultiSlot<K,V> {
     }
     fn fill_in<'t>(&mut self, iter: &mut std::iter::Zip<std::vec::Drain<'t,K>,std::vec::Drain<'t,V>>) -> bool { // is exhausted
         let mut cur = 0;
-        let cap = self.keys.capacity();
-        while cur < cap {
+        while cur < self.capacity {
             match iter.next() {
                 Some((k,v)) => {
                     self.keys.push(k);
@@ -237,9 +283,9 @@ impl<K: Ord, V> CivMap<K,V> {
                 self.data.push(self.slot.into_map_multislot());
             } else {
                 let mut n = 0;
-                while (n < self.data.len())&&(!self.data[n].empty) { n += 1; }
+                while (n < self.data.len())&&(!self.data[n].empty()) { n += 1; }
                 if n == self.data.len() {
-                    self.data.push(MapMultiSlot::empty(n+1,self.slot.max_size()));
+                    self.data.push(MapMultiSlot::new_empty(n+1,self.slot.max_size()));
                 }
                 if let Err(s) = self.merge_into(n) {
                     panic!("Unreachable merge_into: {}",s);
@@ -277,9 +323,9 @@ impl<K: Ord, V> CivMap<K,V> {
         }
     }
     fn check_tombs(&mut self, n: usize) -> Result<(),&'static str> {
-        if self.data[n].empty { return Err("data[n] is empty"); }
+        if self.data[n].empty() { return Err("data[n] is empty"); }
         for i in 0 .. n {
-            if !self.data[i].empty { return Err("one of data[0..n] is not empty"); }
+            if !self.data[i].empty() { return Err("one of data[0..n] is not empty"); }
         }
 
         let sz =  self.slot.max_size();
@@ -302,7 +348,6 @@ impl<K: Ord, V> CivMap<K,V> {
                                 ms.values.push(v);
                             }
                         }
-                        ms.empty = false;
                         if ms.keys.len() != cap {
                             return Err("data count < data.len()");
                         }
@@ -320,7 +365,6 @@ impl<K: Ord, V> CivMap<K,V> {
                             ms.values.push(v);
                         }
                     }
-                    ms.empty = false;
                     if ms.keys.len() != count {
                         return Err("data count < data.len()");
                     }
@@ -344,10 +388,10 @@ impl<K: Ord, V> CivMap<K,V> {
     fn merge_into(&mut self, n: usize) -> Result<(),&'static str> {
         // merge sort for sorted inflating vectors
         
-        if !self.data[n].empty { return Err("data[n] is not empty"); }
+        if !self.data[n].empty() { return Err("data[n] is not empty"); }
         let mut cnt = self.slot.len();
         for i in 0 .. n {
-            if self.data[i].empty { return Err("one of data[0..n] is empty"); }
+            if self.data[i].empty() { return Err("one of data[0..n] is empty"); }
             cnt += self.data[i].keys.len();
         }
         self.data[n].reserve(cnt);
@@ -456,7 +500,6 @@ impl<K: Ord, V> CivMap<K,V> {
         std::mem::swap(&mut self.data[n].keys, &mut self.tmp_merge_keys);
         std::mem::swap(&mut self.data[n].values, &mut self.tmp_merge_values);
    
-        self.data[n].empty = false;
         let c = self.data[n].keys.len();
         self.data[n].flags.set_ones(c);
         Ok(())
@@ -468,7 +511,7 @@ impl<K: Ord, V> CivMap<K,V> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
+    
     #[test]
     #[ignore]
     fn test_merge_sort_1() {
