@@ -221,11 +221,11 @@ pub struct CivMap<K,V> {
     slot: Slot<K,V>,
     data: Vec<MapMultiSlot<K,V>>,
 
-    #[serde(skip_serializing)]
-    #[serde(default = "Vec::new")]
+    //#[serde(skip_serializing)]
+    //#[serde(default = "Vec::new")]
     tmp_merge_keys: Vec<K>,
-    #[serde(skip_serializing)]
-    #[serde(default = "Vec::new")]
+    //#[serde(skip_serializing)]
+    //#[serde(default = "Vec::new")]
     tmp_merge_values: Vec<V>,
 }
 impl<K: std::fmt::Debug, V: std::fmt::Debug> std::fmt::Debug for CivMap<K,V> {

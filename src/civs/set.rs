@@ -93,11 +93,11 @@ pub struct CivSet<K> {
     slot: Slot<K,()>,
     data: Vec<SetMultiSlot<K>>,
 
-    #[serde(skip_serializing)]
-    #[serde(default = "Vec::new")]
+    //#[serde(skip_serializing)]
+    //#[serde(default = "Vec::new")]
     tmp_merge_vec: Vec<K>,
-    #[serde(skip_serializing)]
-    #[serde(default = "Flags::tmp")]
+    //#[serde(skip_serializing)]
+    //#[serde(default = "Flags::tmp")]
     tmp_merge_flags: Flags,
 }
 impl<K: std::fmt::Debug> std::fmt::Debug for CivSet<K> {
