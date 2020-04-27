@@ -122,7 +122,7 @@ impl<K: Ord> CivSet<K> {
             tmp_merge_flags: Flags::tmp(),
         }
     }
-    pub fn contains(&mut self, k: &K) -> bool {
+    pub fn contains(&self, k: &K) -> bool {
         match self.slot.contains(k) {
             Some(_) => true,
             None => self.multy_contains(k).is_some(),

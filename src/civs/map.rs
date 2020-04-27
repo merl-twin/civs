@@ -253,7 +253,7 @@ impl<K: Ord, V> CivMap<K,V> {
     pub fn capacities(&self) -> Vec<usize> {
         self.data.iter().map(|ms|ms.keys.capacity()).collect()
     }
-    pub fn contains(&mut self, k: &K) -> bool {
+    pub fn contains(&self, k: &K) -> bool {
         match self.slot.contains(k) {
             Some(_) => true,
             None => self.multy_contains(k).is_some(),
