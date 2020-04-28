@@ -209,6 +209,9 @@ impl<K: Ord> CivSet<K> {
     pub fn check_len(&self) -> usize {
         self.slot.len() + self.data.iter().fold(0,|acc,x|acc+x.check_len())
     }
+    pub fn capacity(&self) -> usize {
+        self.slot.max_size() + self.data.iter().fold(0,|acc,x|acc+x.capacity)
+    }
     pub fn tombs(&self) -> usize {
         self.tombs
     }
