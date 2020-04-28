@@ -174,8 +174,10 @@ impl<K: Ord> CivSet<K> {
         None
     }
     pub fn insert(&mut self, k: K) -> bool {
+        // return true if value was inserted
+        
         if self.multy_contains(&k).is_some() {
-            return true;
+            return false;
         }
         let (r,filled) = self.slot.insert(k,());
         if let Filled::Full = filled {
@@ -196,7 +198,7 @@ impl<K: Ord> CivSet<K> {
             }
         }
         self.len += 1;
-        r.is_some()
+        r.is_none()
     }
     pub fn len(&self) -> usize {
         self.len
