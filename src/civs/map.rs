@@ -214,18 +214,57 @@ impl<'t,K,V> Iterator for MapMultiSlotDrainIterator<'t,K,V> {
     }
 }
 
-#[derive(Clone,Serialize,Deserialize)]
+
+
+#[derive(Deserialize)]
+struct SerdeCivMap<K,V> {
+    version: u64,
+    len: usize,
+    tombs: usize,
+    slot: Slot<K,V>,
+    data: Vec<MapMultiSlot<K,V>>,
+}
+impl<K,V> std::convert::TryFrom<SerdeCivMap<K,V>> for CivMap<K,V> {
+    type Error = &'static str;
+    fn try_from(map: SerdeCivMap<K,V>) -> Result<CivMap<K,V>,Self::Error> {
+        if map.version != 0 { return Err("Unknown CivMap version"); }
+        Ok(CivMap {
+            len: map.len,
+            tombs: map.tombs,
+            slot: map.slot,
+            data: map.data,
+            tmp_merge_keys: Vec::new(),
+            tmp_merge_values: Vec::new(),
+        })
+    }
+}
+
+impl<K,V> Serialize for CivMap<K,V>
+where
+    K: Serialize,
+    V: Serialize,
+{
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut state = serializer.serialize_struct("SerdeCivMap", 5)?;
+        let cur_ver: u64 = 0;
+        state.serialize_field("version", &cur_ver)?;
+        state.serialize_field("len", &self.len)?;
+        state.serialize_field("tombs", &self.tombs)?;
+        state.serialize_field("slot", &self.slot)?;
+        state.serialize_field("data", &self.data)?;
+        state.end()
+    }
+}
+
+#[derive(Clone,Deserialize)]
+#[serde(try_from = "SerdeCivMap<K,V>")]
 pub struct CivMap<K,V> {
     len: usize,
     tombs: usize,
     slot: Slot<K,V>,
     data: Vec<MapMultiSlot<K,V>>,
 
-    //#[serde(skip_serializing)]
-    //#[serde(default = "Vec::new")]
     tmp_merge_keys: Vec<K>,
-    //#[serde(skip_serializing)]
-    //#[serde(default = "Vec::new")]
     tmp_merge_values: Vec<V>,
 }
 impl<K: std::fmt::Debug, V: std::fmt::Debug> std::fmt::Debug for CivMap<K,V> {

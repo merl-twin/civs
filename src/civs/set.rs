@@ -32,7 +32,7 @@ where
     K: Serialize,
 {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut state = serializer.serialize_struct("SerdeMapMultiSlot", 4)?;
+        let mut state = serializer.serialize_struct("SerdeSetMultiSlot", 4)?;
         state.serialize_field("capacity", &self.capacity)?;
         state.serialize_field("data_size", &std::mem::size_of::<K>())?;
         state.serialize_field("flags", &self.flags)?;
@@ -86,18 +86,55 @@ impl<K: Ord> SetMultiSlot<K> {
     }
 }
 
-#[derive(Clone,Serialize,Deserialize)]
+
+#[derive(Deserialize)]
+struct SerdeCivSet<K> {
+    version: u64,
+    len: usize,
+    tombs: usize,
+    slot: Slot<K,()>,
+    data: Vec<SetMultiSlot<K>>,
+}
+impl<K> std::convert::TryFrom<SerdeCivSet<K>> for CivSet<K> {
+    type Error = &'static str;
+    fn try_from(set: SerdeCivSet<K>) -> Result<CivSet<K>,Self::Error> {
+        if set.version != 0 { return Err("Unknown CivSet version"); }
+        Ok(CivSet {
+            len: set.len,
+            tombs: set.tombs,
+            slot: set.slot,
+            data: set.data,
+            tmp_merge_vec: Vec::new(),
+            tmp_merge_flags: Flags::tmp(),
+        })
+    }
+}
+
+impl<K> Serialize for CivSet<K>
+where
+    K: Serialize,
+{
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut state = serializer.serialize_struct("SerdeCivSet", 5)?;
+        let cur_ver: u64 = 0;
+        state.serialize_field("version", &cur_ver)?;
+        state.serialize_field("len", &self.len)?;
+        state.serialize_field("tombs", &self.tombs)?;
+        state.serialize_field("slot", &self.slot)?;
+        state.serialize_field("data", &self.data)?;
+        state.end()
+    }
+}
+
+#[derive(Clone,Deserialize)]
+#[serde(try_from = "SerdeCivSet<K>")]
 pub struct CivSet<K> {
     len: usize,
     tombs: usize,
     slot: Slot<K,()>,
     data: Vec<SetMultiSlot<K>>,
 
-    //#[serde(skip_serializing)]
-    //#[serde(default = "Vec::new")]
     tmp_merge_vec: Vec<K>,
-    //#[serde(skip_serializing)]
-    //#[serde(default = "Flags::tmp")]
     tmp_merge_flags: Flags,
 }
 impl<K: std::fmt::Debug> std::fmt::Debug for CivSet<K> {
