@@ -3,7 +3,9 @@ use rand::Rng;
 use collections::CivSet;
 use std::collections::BTreeSet;
 
-fn diff(func: &'static str, _x: u64, _set: &CivSet<u64>, _ctr: &BTreeSet<u64>) {
+fn diff(func: &'static str, _x: u64, set: &CivSet<u64>, ctr: &BTreeSet<u64>) {
+    println!("CivSet:   {:?}",set);
+    println!("BTreeSet: {:?}",ctr);
     panic!("Sets differ in {}",func);
 }
 
