@@ -41,7 +41,7 @@ fn main() {
         }
 
         if tm.elapsed() > dur {
-            println!("CivSet:   {}, {}",set.len(),set.tombs());
+            println!("CivSet:   {}; {}, {}, {}",set.check_len(),set.len(),set.tombs(),set.len()-set.tombs());
             println!("BTreeSet: {}\n",ctr.len());
             tm = std::time::Instant::now();
         }

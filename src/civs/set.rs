@@ -67,6 +67,9 @@ impl<K: Ord> SetMultiSlot<K> {
     fn empty(&self) -> bool {
         self.data.len() == 0
     }
+    fn check_len(&self) -> usize {
+        self.flags.0.iter().fold(0,|acc,x| acc + x.count_ones() as usize)
+    }
     fn contains(&self, k: &K) -> Option<usize> {
         if (self.data.len() == 0)||(*k < self.data[0])||(*k > self.data[self.data.len()-1]) { return None; }
         match self.data.binary_search(k) {
@@ -202,6 +205,9 @@ impl<K: Ord> CivSet<K> {
     }
     pub fn len(&self) -> usize {
         self.len
+    }
+    pub fn check_len(&self) -> usize {
+        self.slot.len() + self.data.iter().fold(0,|acc,x|acc+x.check_len())
     }
     pub fn tombs(&self) -> usize {
         self.tombs
