@@ -4,8 +4,8 @@ use std::io::{Write,Read};
 mod civs;
 
 pub use crate::civs::{
-    set::CivSet,
-    map::{CivMap,RemovedItem},
+    set::{CivSet,CivSetIoError},
+    map::{CivMap,CivMapIoError,RemovedItem},
 };
 
 
