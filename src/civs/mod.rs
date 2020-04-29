@@ -9,7 +9,8 @@ use set::SetMultiSlot;
 use map::MapMultiSlot;
 
 
-pub(crate) const TOMBS_LIMIT: f64 = 0.25;
+pub(crate) const TOMBS_LIMIT: f64 = 0.20;
+pub(crate) const AUTO_SHRINK_LIMIT: usize = 1_000_000;
 
 
 #[derive(Deserialize)]

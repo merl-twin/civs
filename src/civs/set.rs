@@ -2,7 +2,7 @@ use serde::{Serialize,Deserialize,ser::{Serializer,SerializeStruct}};
 
 use crate::{
     Flags,Filled,
-    civs::{Slot,TOMBS_LIMIT},
+    civs::{Slot,TOMBS_LIMIT,AUTO_SHRINK_LIMIT},
 };
 
 #[derive(Deserialize)]
@@ -198,10 +198,16 @@ impl<K: Ord> CivSet<K> {
                 if let Err(s) = self.check_tombs(n) {
                     panic!("Unreachable check_tombs: {}",s);
                 }
+                self.shrink_long();
             }
         }
-        self.len += 1;
-        r.is_none()
+        match r {
+            None => {
+                self.len += 1;
+                true
+            },
+            Some(_) => false,
+        }
     }
     pub fn len(&self) -> usize {
         self.len
@@ -216,18 +222,27 @@ impl<K: Ord> CivSet<K> {
         self.tombs
     }
     pub fn remove(&mut self, k: &K) -> bool {
-        match self.multy_contains(&k) {
+        let r = match self.multy_contains(&k) {
             Some((msi,idx)) => {
                 self.tombs += 1;
                 self.data[msi].flags.unset(idx);
                 true
             },
             None => self.slot.remove(k).is_some(),
-        }
+        };
+        if r { self.len -= 1; }
+        r
     }
     pub fn shrink_to_fit(&mut self) {
         for ms in &mut self.data {
             ms.shrink_to_fit();
+        }
+    }
+    fn shrink_long(&mut self) {
+        for ms in &mut self.data {
+            if (ms.capacity >= AUTO_SHRINK_LIMIT)&&(ms.empty()) {   
+                ms.shrink_to_fit();
+            }
         }
     }
     fn merge_into(&mut self, n: usize) -> Result<(),&'static str> {
@@ -272,8 +287,8 @@ impl<K: Ord> CivSet<K> {
         }
 
         let sz =  self.slot.max_size();
-        let local_tombs = self.data[n].data.capacity() - self.data[n].data.len();
-        let local_part = (local_tombs as f64) / (self.data[n].data.capacity() as f64);
+        let local_tombs = self.data[n].capacity - self.data[n].data.len();
+        let local_part = (local_tombs as f64) / (self.data[n].capacity as f64);
         if (local_tombs > sz) && (local_part > TOMBS_LIMIT) {
             std::mem::swap(&mut self.data[n].data, &mut self.tmp_merge_vec);
             {
@@ -282,7 +297,7 @@ impl<K: Ord> CivSet<K> {
 
                 let mut msi = self.data[..n].iter_mut();
                 while let Some(ms) = msi.next_back() {
-                    let cap = ms.data.capacity();
+                    let cap = ms.capacity;
                     if count >= cap {
                         for _ in 0 .. cap {
                             if let Some(k) = iter.next() {
