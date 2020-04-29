@@ -1,17 +1,23 @@
-use rand::Rng;
+#[cfg(not(feature = "debug"))]
+compile_error!("Feature 'debug' must be enabled for this example");
 
-use collections::CivSet;
-use std::collections::BTreeSet;
+#[cfg(not(feature = "debug"))]
+fn main() {}
 
-use std::io::Write;
+#[cfg(feature = "debug")]
+use {
+    rand::Rng,
+    collections::CivSet,
+    std::collections::BTreeSet,
+    std::io::Write,
+};
 
-fn diff(func: &'static str, _x: u64, set: &CivSet<u64>, ctr: &BTreeSet<u64>) {
-    println!("CivSet:   {:?}",set);
-    println!("BTreeSet: {:?}",ctr);
-    panic!("Sets differ in {}",func);
-}
-
+#[cfg(feature = "debug")]
 fn main() {
+    fn diff(func: &'static str, _x: u64, _set: &CivSet<u64>, _ctr: &BTreeSet<u64>) {
+        panic!("Sets differ in {}",func);
+    }
+    
     let mut rng = rand::thread_rng();
     
     let mut set = CivSet::new();
@@ -60,3 +66,4 @@ fn main() {
     }
     
 }
+

@@ -323,9 +323,7 @@ impl<K: Ord, V> CivMap<K,V> {
             tmp_merge_values: Vec::new(),
         }
     }
-    pub fn capacities(&self) -> Vec<usize> {
-        self.data.iter().map(|ms|ms.keys.capacity()).collect()
-    }
+    
     pub fn contains(&self, k: &K) -> bool {
         match self.slot.contains(k) {
             Some(_) => true,
@@ -391,15 +389,6 @@ impl<K: Ord, V> CivMap<K,V> {
     pub fn tombs(&self) -> usize {
         self.tombs
     }
-    pub fn check_len(&self) -> usize {
-        self.slot.len() + self.data.iter().fold(0,|acc,x|acc+x.check_len())
-    }
-    pub fn max_capacity(&self) -> usize {
-        self.slot.max_size() + self.data.iter().fold(0,|acc,x|acc+x.capacity)
-    }
-    pub fn real_capacity(&self) -> usize {
-        self.slot.max_size() + self.data.iter().fold(0,|acc,x|acc+x.keys.capacity())
-    }
     pub fn remove(&mut self, k: &K) -> Option<RemovedItem<V>> {
         let r = match self.multy_contains(&k) {
             Some((msi,idx)) => {
@@ -416,23 +405,6 @@ impl<K: Ord, V> CivMap<K,V> {
             self.len -= 1;
         }
         r
-    }
-    pub fn statistics(&self) -> Vec<String> {
-        let mut s = (0,0,0);
-        let mut v = Vec::new();
-        for (i,ms) in self.data.iter().enumerate() {
-            if !ms.empty() {
-                let len = ms.check_len();
-                let cap = ms.capacity;
-                let tombs = cap - len;
-                v.push(format!("{:3}: {:12} {:12} {:12}",i,cap,len,tombs));
-                s.0 += cap;
-                s.1 += len;
-                s.2 += tombs;
-            }
-        }
-        v.push(format!("TOT: {:12} {:12} {:12}",s.0,s.1,s.2));
-        v
     }
     pub fn shrink_to_fit(&mut self) {
         for ms in &mut self.data {
@@ -630,7 +602,38 @@ impl<K: Ord, V> CivMap<K,V> {
     }
 }
 
-
+#[cfg(feature = "debug")]
+impl<K: Ord, V> CivMap<K,V> {
+    pub fn check_len(&self) -> usize {
+        self.slot.len() + self.data.iter().fold(0,|acc,x|acc+x.check_len())
+    }
+    pub fn max_capacity(&self) -> usize {
+        self.slot.max_size() + self.data.iter().fold(0,|acc,x|acc+x.capacity)
+    }
+    pub fn real_capacity(&self) -> usize {
+        self.slot.max_size() + self.data.iter().fold(0,|acc,x|acc+x.keys.capacity())
+    }
+    pub fn capacities(&self) -> Vec<usize> {
+        self.data.iter().map(|ms|ms.keys.capacity()).collect()
+    }
+    pub fn statistics(&self) -> Vec<String> {
+        let mut s = (0,0,0);
+        let mut v = Vec::new();
+        for (i,ms) in self.data.iter().enumerate() {
+            if !ms.empty() {
+                let len = ms.check_len();
+                let cap = ms.capacity;
+                let tombs = cap - len;
+                v.push(format!("{:3}: {:12} {:12} {:12}",i,cap,len,tombs));
+                s.0 += cap;
+                s.1 += len;
+                s.2 += tombs;
+            }
+        }
+        v.push(format!("TOT: {:12} {:12} {:12}",s.0,s.1,s.2));
+        v
+    }
+}
 
 #[cfg(test)]
 mod tests {

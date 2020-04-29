@@ -243,15 +243,6 @@ impl<K: Ord> CivSet<K> {
     pub fn len(&self) -> usize {
         self.len
     }
-    pub fn check_len(&self) -> usize {
-        self.slot.len() + self.data.iter().fold(0,|acc,x|acc+x.check_len())
-    }
-    pub fn max_capacity(&self) -> usize {
-        self.slot.max_size() + self.data.iter().fold(0,|acc,x|acc+x.capacity)
-    }
-    pub fn real_capacity(&self) -> usize {
-        self.slot.max_size() + self.data.iter().fold(0,|acc,x|acc+x.data.capacity())
-    }
     pub fn tombs(&self) -> usize {
         self.tombs
     }
@@ -278,23 +269,6 @@ impl<K: Ord> CivSet<K> {
                 ms.shrink_to_fit();
             }
         }
-    }
-    pub fn statistics(&self) -> Vec<String> {
-        let mut s = (0,0,0);
-        let mut v = Vec::new();
-        for (i,ms) in self.data.iter().enumerate() {
-            if !ms.empty() {
-                let len = ms.check_len();
-                let cap = ms.capacity;
-                let tombs = cap - len;
-                v.push(format!("{:3}: {:12} {:12} {:12}",i,cap,len,tombs));
-                s.0 += cap;
-                s.1 += len;
-                s.2 += tombs;
-            }
-        }
-        v.push(format!("TOT: {:12} {:12} {:12}",s.0,s.1,s.2));
-        v
     }
     fn merge_into(&mut self, n: usize) -> Result<(),&'static str> {
         if !self.data[n].empty() { return Err("data[n] is not empty"); }
@@ -389,5 +363,35 @@ impl<K: Ord> CivSet<K> {
             self.data[n].clear();
         }
         Ok(())
+    }
+}
+
+#[cfg(feature = "debug")]
+impl<K: Ord> CivSet<K> {
+    pub fn check_len(&self) -> usize {
+        self.slot.len() + self.data.iter().fold(0,|acc,x|acc+x.check_len())
+    }
+    pub fn max_capacity(&self) -> usize {
+        self.slot.max_size() + self.data.iter().fold(0,|acc,x|acc+x.capacity)
+    }
+    pub fn real_capacity(&self) -> usize {
+        self.slot.max_size() + self.data.iter().fold(0,|acc,x|acc+x.data.capacity())
+    }
+    pub fn statistics(&self) -> Vec<String> {
+        let mut s = (0,0,0);
+        let mut v = Vec::new();
+        for (i,ms) in self.data.iter().enumerate() {
+            if !ms.empty() {
+                let len = ms.check_len();
+                let cap = ms.capacity;
+                let tombs = cap - len;
+                v.push(format!("{:3}: {:12} {:12} {:12}",i,cap,len,tombs));
+                s.0 += cap;
+                s.1 += len;
+                s.2 += tombs;
+            }
+        }
+        v.push(format!("TOT: {:12} {:12} {:12}",s.0,s.1,s.2));
+        v
     }
 }

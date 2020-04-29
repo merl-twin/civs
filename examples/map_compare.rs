@@ -1,17 +1,24 @@
-use rand::Rng;
+#[cfg(not(feature = "debug"))]
+compile_error!("Feature 'debug' must be enabled for this example");
 
-use collections::CivMap;
-use std::collections::BTreeMap;
+#[cfg(not(feature = "debug"))]
+fn main() {}
 
-use std::io::Write;
+#[cfg(feature = "debug")]
+use {
+    rand::Rng,
+    collections::CivMap,
+    std::collections::BTreeMap,
+    std::io::Write,
+};
 
-fn diff(func: &'static str, _x: u64, set: &CivMap<u64,u32>, ctr: &BTreeMap<u64,u32>) {
-    println!("CivMap:   {:?}",set);
-    println!("BTreeMap: {:?}",ctr);
-    panic!("Maps differ in {}",func);
-}
 
+#[cfg(feature = "debug")]
 fn main() {
+    fn diff(func: &'static str, _x: u64, _set: &CivMap<u64,u32>, _ctr: &BTreeMap<u64,u32>) {
+        panic!("Maps differ in {}",func);
+    }
+    
     let mut rng = rand::thread_rng();
     
     let mut set = CivMap::new();
