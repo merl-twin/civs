@@ -1,7 +1,12 @@
-use serde::{Serialize,Deserialize,ser::{Serializer,SerializeStruct}};
-
+use serde::{
+    Serialize,Deserialize,
+    ser::{Serializer,SerializeStruct},
+    de::DeserializeOwned,
+};
+use byteorder::{LittleEndian,ReadBytesExt,WriteBytesExt};
+use std::io::{Read,Write};
 use crate::{
-    Flags,Filled,
+    Flags,Filled,Binary,
     civs::{Slot,TOMBS_LIMIT,AUTO_SHRINK_LIMIT},
 };
 
@@ -107,6 +112,11 @@ pub(crate) struct MapMultiSlot<K,V> {
     keys: Vec<K>,
     values: Vec<V>,
 }
+impl<K,V> MapMultiSlot<K,V> {
+    fn heap_mem(&self) -> usize {
+        self.flags.heap_mem() + self.keys.capacity() * std::mem::size_of::<K>() + self.values.capacity() * std::mem::size_of::<V>()
+    }
+}
 impl<K: Ord, V> MapMultiSlot<K,V> {
     pub(crate) fn new(data: Vec<(K,V)>) -> MapMultiSlot<K,V> {
         let len = data.len();
@@ -134,6 +144,9 @@ impl<K: Ord, V> MapMultiSlot<K,V> {
     }
     fn empty(&self) -> bool {
         self.keys.len() == 0
+    }
+    fn check_len(&self) -> usize {
+        self.flags.0.iter().fold(0,|acc,x| acc + x.count_ones() as usize)
     }
     fn contains(&self, k: &K) -> Option<usize> {
         if (self.keys.len() == 0)||(*k < self.keys[0])||(*k > self.keys[self.keys.len()-1]) { return None; }
@@ -216,48 +229,69 @@ impl<'t,K,V> Iterator for MapMultiSlotDrainIterator<'t,K,V> {
 
 
 
-#[derive(Deserialize)]
-struct SerdeCivMap<K,V> {
-    version: u64,
-    len: usize,
-    tombs: usize,
-    slot: Slot<K,V>,
-    data: Vec<MapMultiSlot<K,V>>,
+
+const CURRENT_CIVS_MAP_VERSION: (u32,u32) = (0,1);
+
+#[derive(Debug)]
+pub enum CivMapIoError {
+    WriteHeader,
+    WriteSlot(bincode::Error),
+    WriteData(bincode::Error),
+    ReadHeader,
+    ReadSlot(bincode::Error),
+    ReadData(bincode::Error),
+    InvalidHeader,
+    InvalidVersion(u32,u32),
 }
-impl<K,V> std::convert::TryFrom<SerdeCivMap<K,V>> for CivMap<K,V> {
-    type Error = &'static str;
-    fn try_from(map: SerdeCivMap<K,V>) -> Result<CivMap<K,V>,Self::Error> {
-        if map.version != 0 { return Err("Unknown CivMap version"); }
+
+impl<K: Ord + Serialize + DeserializeOwned, V: Serialize + DeserializeOwned> Binary for CivMap<K,V> {
+    type IoError = CivMapIoError;
+    fn memory(&self) -> usize {
+        let mut data_mem = self.data.capacity() * std::mem::size_of::<MapMultiSlot<K,V>>();
+        for ms in &self.data {
+            data_mem += ms.heap_mem();
+        }
+        std::mem::size_of::<CivMap<K,V>>() + self.slot.heap_mem() + data_mem
+    }
+    fn into_writer<W: Write>(&self, mut wrt: W) -> Result<(),Self::IoError> {
+        let version = CURRENT_CIVS_MAP_VERSION;
+        write!(wrt,"CIVM").map_err(|_|CivMapIoError::WriteHeader)?;
+        wrt.write_u32::<LittleEndian>(version.0).map_err(|_|CivMapIoError::WriteHeader)?;
+        wrt.write_u32::<LittleEndian>(version.1).map_err(|_|CivMapIoError::WriteHeader)?;
+        bincode::serialize_into(&mut wrt,&self.slot).map_err(CivMapIoError::WriteSlot)?;
+        bincode::serialize_into(&mut wrt,&self.data).map_err(CivMapIoError::WriteData)
+    }
+    fn from_reader<R: Read>(&self, mut rdr: R) -> Result<CivMap<K,V>,Self::IoError> {
+        let mut buf = [0; 4];
+        rdr.read_exact(&mut buf).map_err(|_|CivMapIoError::ReadHeader)?;
+        if buf != "CIVM".as_bytes()[0..4] { return Err(CivMapIoError::InvalidHeader); }
+        let maj = rdr.read_u32::<LittleEndian>().map_err(|_|CivMapIoError::ReadHeader)?;
+        let min = rdr.read_u32::<LittleEndian>().map_err(|_|CivMapIoError::ReadHeader)?;
+        if (maj != 0)||(min != 1) { return Err(CivMapIoError::InvalidVersion(maj,min)); }
+        let slot: Slot<K,V> = bincode::deserialize_from(&mut rdr).map_err(CivMapIoError::ReadSlot)?;
+        let data: Vec<MapMultiSlot<K,V>> = bincode::deserialize_from(&mut rdr).map_err(CivMapIoError::ReadData)?;
+        let mut len = slot.len();
+        let mut tombs = 0;
+        for ms in &data {
+            let ln = ms.check_len();
+            len += ln;
+            tombs += ms.capacity - ln;
+        }
         Ok(CivMap {
-            len: map.len,
-            tombs: map.tombs,
-            slot: map.slot,
-            data: map.data,
+            len: len,
+            tombs: tombs,
+            slot: slot,
+            data: data,
+            
             tmp_merge_keys: Vec::new(),
             tmp_merge_values: Vec::new(),
         })
     }
 }
 
-impl<K,V> Serialize for CivMap<K,V>
-where
-    K: Serialize,
-    V: Serialize,
-{
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut state = serializer.serialize_struct("SerdeCivMap", 5)?;
-        let cur_ver: u64 = 0;
-        state.serialize_field("version", &cur_ver)?;
-        state.serialize_field("len", &self.len)?;
-        state.serialize_field("tombs", &self.tombs)?;
-        state.serialize_field("slot", &self.slot)?;
-        state.serialize_field("data", &self.data)?;
-        state.end()
-    }
-}
 
-#[derive(Clone,Deserialize)]
-#[serde(try_from = "SerdeCivMap<K,V>")]
+
+#[derive(Clone)]
 pub struct CivMap<K,V> {
     len: usize,
     tombs: usize,
@@ -356,6 +390,9 @@ impl<K: Ord, V> CivMap<K,V> {
     }
     pub fn tombs(&self) -> usize {
         self.tombs
+    }
+    pub fn check_len(&self) -> usize {
+        self.slot.len() + self.data.iter().fold(0,|acc,x|acc+x.check_len())
     }
     pub fn remove(&mut self, k: &K) -> Option<RemovedItem<V>> {
         let r = match self.multy_contains(&k) {

@@ -60,6 +60,9 @@ impl<K,V> Slot<K,V> {
     fn max_size(&self) -> usize {
         self.size
     }
+    fn heap_mem(&self) -> usize {
+        self.data.capacity() * std::mem::size_of::<(K,V)>()
+    }
 }
 impl<K: Ord,V> Slot<K,V> {
     fn new() -> Slot<K,V> {

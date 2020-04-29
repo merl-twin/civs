@@ -1,4 +1,5 @@
 use serde::{Serialize,Deserialize};
+use std::io::{Write,Read};
 
 mod civs;
 
@@ -6,6 +7,15 @@ pub use crate::civs::{
     set::CivSet,
     map::{CivMap,RemovedItem},
 };
+
+
+pub trait Binary: Sized {
+    type IoError;
+    fn memory(&self) -> usize;
+    fn into_writer<W: Write>(&self, wrt: W) -> Result<(),Self::IoError>;
+    fn from_reader<R: Read>(&self, rdr: R) -> Result<Self,Self::IoError>;
+}
+
 
 #[derive(Debug)]
 enum Filled {
@@ -16,11 +26,9 @@ enum Filled {
 #[derive(Debug,Clone,Serialize,Deserialize)]
 struct Flags(Vec<u64>);
 impl Flags {
-    /*fn new64(sz: usize) -> Flags {
-        let mut v = Vec::with_capacity(sz);
-        for _ in 0 .. sz { v.push(0); }
-        Flags(v)
-}*/
+    fn heap_mem(&self) -> usize {
+        self.0.capacity() * std::mem::size_of::<u64>()
+    }
     fn tmp() -> Flags {
         Flags(vec![])
     }

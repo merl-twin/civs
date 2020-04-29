@@ -1,7 +1,13 @@
-use serde::{Serialize,Deserialize,ser::{Serializer,SerializeStruct}};
+use serde::{
+    Serialize,Deserialize,
+    ser::{Serializer,SerializeStruct},
+    de::DeserializeOwned,
+};
+use byteorder::{LittleEndian,ReadBytesExt,WriteBytesExt};
+use std::io::{Read,Write};
 
 use crate::{
-    Flags,Filled,
+    Flags,Filled,Binary,
     civs::{Slot,TOMBS_LIMIT,AUTO_SHRINK_LIMIT},
 };
 
@@ -48,6 +54,11 @@ pub(crate) struct SetMultiSlot<K> {
     flags: Flags,
     data: Vec<K>,
 }
+impl<K> SetMultiSlot<K> {
+    fn heap_mem(&self) -> usize {
+        self.flags.heap_mem() + self.data.capacity() * std::mem::size_of::<K>()
+    }
+}
 impl<K: Ord> SetMultiSlot<K> {
     fn new_empty(sz: usize, slot_sz: usize) -> SetMultiSlot<K> {
         let cap = slot_sz * (0x1 << (sz-1));
@@ -90,47 +101,67 @@ impl<K: Ord> SetMultiSlot<K> {
 }
 
 
-#[derive(Deserialize)]
-struct SerdeCivSet<K> {
-    version: u64,
-    len: usize,
-    tombs: usize,
-    slot: Slot<K,()>,
-    data: Vec<SetMultiSlot<K>>,
+
+const CURRENT_CIVS_SET_VERSION: (u32,u32) = (0,1);
+
+#[derive(Debug)]
+pub enum CivSetIoError {
+    WriteHeader,
+    WriteSlot(bincode::Error),
+    WriteData(bincode::Error),
+    ReadHeader,
+    ReadSlot(bincode::Error),
+    ReadData(bincode::Error),
+    InvalidHeader,
+    InvalidVersion(u32,u32),
 }
-impl<K> std::convert::TryFrom<SerdeCivSet<K>> for CivSet<K> {
-    type Error = &'static str;
-    fn try_from(set: SerdeCivSet<K>) -> Result<CivSet<K>,Self::Error> {
-        if set.version != 0 { return Err("Unknown CivSet version"); }
+
+impl<K: Ord + Serialize + DeserializeOwned> Binary for CivSet<K> {
+    type IoError = CivSetIoError;
+    fn memory(&self) -> usize {
+        let mut data_mem = self.data.capacity() * std::mem::size_of::<SetMultiSlot<K>>();
+        for ms in &self.data {
+            data_mem += ms.heap_mem();
+        }
+        std::mem::size_of::<CivSet<K>>() + self.slot.heap_mem() + data_mem
+    }
+    fn into_writer<W: Write>(&self, mut wrt: W) -> Result<(),Self::IoError> {
+        let version = CURRENT_CIVS_SET_VERSION;
+        write!(wrt,"CIVS").map_err(|_|CivSetIoError::WriteHeader)?;
+        wrt.write_u32::<LittleEndian>(version.0).map_err(|_|CivSetIoError::WriteHeader)?;
+        wrt.write_u32::<LittleEndian>(version.1).map_err(|_|CivSetIoError::WriteHeader)?;
+        bincode::serialize_into(&mut wrt,&self.slot).map_err(CivSetIoError::WriteSlot)?;
+        bincode::serialize_into(&mut wrt,&self.data).map_err(CivSetIoError::WriteData)
+    }
+    fn from_reader<R: Read>(&self, mut rdr: R) -> Result<CivSet<K>,Self::IoError> {
+        let mut buf = [0; 4];
+        rdr.read_exact(&mut buf).map_err(|_|CivSetIoError::ReadHeader)?;
+        if buf != "CIVS".as_bytes()[0..4] { return Err(CivSetIoError::InvalidHeader); }
+        let maj = rdr.read_u32::<LittleEndian>().map_err(|_|CivSetIoError::ReadHeader)?;
+        let min = rdr.read_u32::<LittleEndian>().map_err(|_|CivSetIoError::ReadHeader)?;
+        if (maj != 0)||(min != 1) { return Err(CivSetIoError::InvalidVersion(maj,min)); }
+        let slot: Slot<K,()> = bincode::deserialize_from(&mut rdr).map_err(CivSetIoError::ReadSlot)?;
+        let data: Vec<SetMultiSlot<K>> = bincode::deserialize_from(&mut rdr).map_err(CivSetIoError::ReadData)?;
+        let mut len = slot.len();
+        let mut tombs = 0;
+        for ms in &data {
+            let ln = ms.check_len();
+            len += ln;
+            tombs += ms.capacity - ln;
+        }
         Ok(CivSet {
-            len: set.len,
-            tombs: set.tombs,
-            slot: set.slot,
-            data: set.data,
+            len: len,
+            tombs: tombs,
+            slot: slot,
+            data: data,
+            
             tmp_merge_vec: Vec::new(),
             tmp_merge_flags: Flags::tmp(),
         })
     }
 }
 
-impl<K> Serialize for CivSet<K>
-where
-    K: Serialize,
-{
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut state = serializer.serialize_struct("SerdeCivSet", 5)?;
-        let cur_ver: u64 = 0;
-        state.serialize_field("version", &cur_ver)?;
-        state.serialize_field("len", &self.len)?;
-        state.serialize_field("tombs", &self.tombs)?;
-        state.serialize_field("slot", &self.slot)?;
-        state.serialize_field("data", &self.data)?;
-        state.end()
-    }
-}
-
-#[derive(Clone,Deserialize)]
-#[serde(try_from = "SerdeCivSet<K>")]
+#[derive(Clone)]
 pub struct CivSet<K> {
     len: usize,
     tombs: usize,
