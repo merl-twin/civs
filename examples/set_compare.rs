@@ -43,7 +43,7 @@ fn main() {
         if tm.elapsed() > dur {
             let checked = set.check_len();
             let capacity = set.capacity();
-            println!("CivSet:   {}; {}, {}, {}; {} {:.3}",checked,set.len(),set.tombs(),set.len()-set.tombs(),capacity,checked as f64/capacity as f64);
+            println!("CivSet:   {}; {}, {}, {}; {} {:.3}",checked,set.len(),set.tombs(),set.len()+set.tombs(),capacity,checked as f64/capacity as f64);
             println!("BTreeSet: {}\n",ctr.len());
             tm = std::time::Instant::now();
         }
