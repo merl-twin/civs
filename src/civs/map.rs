@@ -261,7 +261,7 @@ impl<K: Ord + Serialize + DeserializeOwned, V: Serialize + DeserializeOwned> Bin
         bincode::serialize_into(&mut wrt,&self.slot).map_err(CivMapIoError::WriteSlot)?;
         bincode::serialize_into(&mut wrt,&self.data).map_err(CivMapIoError::WriteData)
     }
-    fn from_reader<R: Read>(&self, mut rdr: R) -> Result<CivMap<K,V>,Self::IoError> {
+    fn from_reader<R: Read>(mut rdr: R) -> Result<CivMap<K,V>,Self::IoError> {
         let mut buf = [0; 4];
         rdr.read_exact(&mut buf).map_err(|_|CivMapIoError::ReadHeader)?;
         if buf != "CIVM".as_bytes()[0..4] { return Err(CivMapIoError::InvalidHeader); }

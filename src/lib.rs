@@ -13,7 +13,7 @@ pub trait Binary: Sized {
     type IoError;
     fn memory(&self) -> usize;
     fn into_writer<W: Write>(&self, wrt: W) -> Result<(),Self::IoError>;
-    fn from_reader<R: Read>(&self, rdr: R) -> Result<Self,Self::IoError>;
+    fn from_reader<R: Read>(rdr: R) -> Result<Self,Self::IoError>;
 }
 
 
