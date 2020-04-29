@@ -3,6 +3,8 @@ use rand::Rng;
 use collections::CivSet;
 use std::collections::BTreeSet;
 
+use std::io::Write;
+
 fn diff(func: &'static str, _x: u64, set: &CivSet<u64>, ctr: &BTreeSet<u64>) {
     println!("CivSet:   {:?}",set);
     println!("BTreeSet: {:?}",ctr);
@@ -47,6 +49,12 @@ fn main() {
             let tombs = set.tombs();
             println!("BTreeSet: {}",ctr.len());
             println!("CivSet:   {}; {}, {}; {}\n    tomb/data {:.3}, data/cap {:.3}, real/max {:.3}",checked,set.len(),tombs,real_capacity,tombs as f64/checked as f64,checked as f64/real_capacity as f64,real_capacity as f64/max_capacity as f64);
+
+            writeln!(std::io::stderr(),"BTreeSet: {}",ctr.len()).unwrap();
+            writeln!(std::io::stderr(),"CivSet:   {}; {}, {}; {}\n    tomb/data {:.3}, data/cap {:.3}, real/max {:.3}",checked,set.len(),tombs,real_capacity,tombs as f64/checked as f64,checked as f64/real_capacity as f64,real_capacity as f64/max_capacity as f64).unwrap();
+            for s in set.statistics() {
+                writeln!(std::io::stderr(),"{}",s).unwrap();
+            }
             tm = std::time::Instant::now();
         }
     }
