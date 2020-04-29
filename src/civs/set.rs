@@ -16,7 +16,7 @@ impl<K> std::convert::TryFrom<SerdeSetMultiSlot<K>> for SetMultiSlot<K> {
     type Error = String;
     fn try_from(mut slot: SerdeSetMultiSlot<K>) -> Result<SetMultiSlot<K>,String> {
         if slot.data_size != std::mem::size_of::<K>() { return Err(format!("Unvalid data size {}, must be {}",std::mem::size_of::<K>(),slot.data_size)); }
-        if slot.data.len() < slot.capacity {
+        if (slot.data.len() > 0) && (slot.data.len() < slot.capacity) {
             slot.data.reserve(slot.capacity - slot.data.len());
         }
         Ok(SetMultiSlot {
@@ -215,8 +215,11 @@ impl<K: Ord> CivSet<K> {
     pub fn check_len(&self) -> usize {
         self.slot.len() + self.data.iter().fold(0,|acc,x|acc+x.check_len())
     }
-    pub fn capacity(&self) -> usize {
+    pub fn max_capacity(&self) -> usize {
         self.slot.max_size() + self.data.iter().fold(0,|acc,x|acc+x.capacity)
+    }
+    pub fn real_capacity(&self) -> usize {
+        self.slot.max_size() + self.data.iter().fold(0,|acc,x|acc+x.data.capacity())
     }
     pub fn tombs(&self) -> usize {
         self.tombs

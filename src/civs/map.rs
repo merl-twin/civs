@@ -2,7 +2,7 @@ use serde::{Serialize,Deserialize,ser::{Serializer,SerializeStruct}};
 
 use crate::{
     Flags,Filled,
-    civs::{Slot,TOMBS_LIMIT},
+    civs::{Slot,TOMBS_LIMIT,AUTO_SHRINK_LIMIT},
 };
 
 pub enum RemovedItem<'t,V> {
@@ -67,10 +67,10 @@ impl<K,V> std::convert::TryFrom<SerdeMapMultiSlot<K,V>> for MapMultiSlot<K,V> {
     fn try_from(mut slot: SerdeMapMultiSlot<K,V>) -> Result<MapMultiSlot<K,V>,String> {
         if slot.key_size != std::mem::size_of::<K>() { return Err(format!("Unvalid key size {}, must be {}",std::mem::size_of::<K>(),slot.key_size)); }
         if slot.value_size != std::mem::size_of::<V>() { return Err(format!("Unvalid value size {}, must be {}",std::mem::size_of::<V>(),slot.value_size)); }
-        if slot.keys.len() < slot.capacity {
+        if (slot.keys.len() > 0) && (slot.keys.len() < slot.capacity) {
             slot.keys.reserve(slot.capacity - slot.keys.len());
         }
-        if slot.values.len() < slot.capacity {
+        if (slot.values.len() > 0) && (slot.values.len() < slot.capacity) {
             slot.values.reserve(slot.capacity - slot.values.len());
         }
         Ok(MapMultiSlot {
@@ -343,9 +343,12 @@ impl<K: Ord, V> CivMap<K,V> {
                 if let Err(s) = self.check_tombs(n) {
                     panic!("Unreachable check_tombs: {}",s);
                 }
+                self.shrink_long();
             }
         }
-        self.len += 1;
+        if r.is_none() {
+            self.len += 1;
+        }
         r
     }
     pub fn len(&self) -> usize {
@@ -355,7 +358,7 @@ impl<K: Ord, V> CivMap<K,V> {
         self.tombs
     }
     pub fn remove(&mut self, k: &K) -> Option<RemovedItem<V>> {
-        match self.multy_contains(&k) {
+        let r = match self.multy_contains(&k) {
             Some((msi,idx)) => {
                 self.tombs += 1;
                 self.data[msi].flags.unset(idx);
@@ -365,11 +368,22 @@ impl<K: Ord, V> CivMap<K,V> {
                 Some(v) => Some(RemovedItem::Owned(v)),
                 None => None,
             },
+        };
+        if r.is_some() {
+            self.len -= 1;
         }
+        r
     }
     pub fn shrink_to_fit(&mut self) {
         for ms in &mut self.data {
             ms.shrink_to_fit();
+        }
+    }
+    fn shrink_long(&mut self) {
+        for ms in &mut self.data {
+            if (ms.capacity >= AUTO_SHRINK_LIMIT)&&(ms.empty()) {   
+                ms.shrink_to_fit();
+            }
         }
     }
     fn check_tombs(&mut self, n: usize) -> Result<(),&'static str> {
@@ -379,8 +393,8 @@ impl<K: Ord, V> CivMap<K,V> {
         }
 
         let sz =  self.slot.max_size();
-        let local_tombs = self.data[n].keys.capacity() - self.data[n].keys.len();
-        let local_part = (local_tombs as f64) / (self.data[n].keys.capacity() as f64);
+        let local_tombs = self.data[n].capacity - self.data[n].keys.len();
+        let local_part = (local_tombs as f64) / (self.data[n].capacity as f64);
         if (local_tombs > sz) && (local_part > TOMBS_LIMIT) {
             std::mem::swap(&mut self.data[n].keys, &mut self.tmp_merge_keys);
             std::mem::swap(&mut self.data[n].values, &mut self.tmp_merge_values);
@@ -390,7 +404,7 @@ impl<K: Ord, V> CivMap<K,V> {
 
                 let mut msi = self.data[..n].iter_mut();
                 while let Some(ms) = msi.next_back() {
-                    let cap = ms.keys.capacity();
+                    let cap = ms.capacity;
                     if count >= cap {
                         for _ in 0 .. cap {
                             if let Some((k,v)) = iter.next() {
