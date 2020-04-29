@@ -44,8 +44,9 @@ fn main() {
             let checked = set.check_len();
             let real_capacity = set.real_capacity();
             let max_capacity = set.max_capacity();
-            println!("CivSet:   {}; {}, {}; {}; data/cap {:.3}, real/max {:.3}",checked,set.len(),set.tombs(),real_capacity,checked as f64/real_capacity as f64,real_capacity as f64/max_capacity as f64);
-            println!("BTreeSet: {}\n",ctr.len());
+            let tombs = set.tombs();
+            println!("BTreeSet: {}",ctr.len());
+            println!("CivSet:   {}; {}, {}; {}\n    tomb/data {:.3}, data/cap {:.3}, real/max {:.3}",checked,set.len(),tombs,real_capacity,tombs as f64/checked as f64,checked as f64/real_capacity as f64,real_capacity as f64/max_capacity as f64);
             tm = std::time::Instant::now();
         }
     }
