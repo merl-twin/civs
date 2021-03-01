@@ -7,7 +7,7 @@ fn main() {}
 #[cfg(feature = "debug")]
 use {
     rand::Rng,
-    collections::CivSet,
+    civs::CivSet,
     std::collections::BTreeSet,
     std::io::Write,
 };
