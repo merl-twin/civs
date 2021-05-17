@@ -323,6 +323,15 @@ impl<K: Ord, V> CivMap<K,V> {
             tmp_merge_values: Vec::new(),
         }
     }
+
+    pub fn clear(&mut self) {
+        self.len = 0;
+        self.tombs = 0;
+        self.slot.clear();
+        self.data.clear();
+        self.tmp_merge_keys.clear();
+        self.tmp_merge_values.clear();
+    }
     
     pub fn contains(&self, k: &K) -> bool {
         match self.slot.contains(k) {

@@ -193,6 +193,14 @@ impl<K: Ord> CivSet<K> {
             tmp_merge_flags: Flags::tmp(),
         }
     }
+    pub fn clear(&mut self) {
+        self.len = 0;
+        self.tombs = 0;
+        self.slot.clear();
+        self.data.clear();
+        self.tmp_merge_flags = Flags::tmp();
+        self.tmp_merge_vec.clear();
+    }
     pub fn contains(&self, k: &K) -> bool {
         match self.slot.contains(k) {
             Some(_) => true,
