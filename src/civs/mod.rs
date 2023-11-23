@@ -137,6 +137,9 @@ impl<K: Ord,V> Slot<K,V> {
         self.clear();
         SetMultiSlot::new(vc)
     }
+    fn iter(&self) -> std::slice::Iter<(K,V)> {
+        self.data.iter()
+    }
 }
 
 

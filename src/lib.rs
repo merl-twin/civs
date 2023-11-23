@@ -5,7 +5,7 @@ mod civs;
 
 pub use crate::civs::{
     set::{CivSet,CivSetIoError},
-    map::{CivMap,CivMapIoError,RemovedItem},
+    map::{CivMap,CivMapIoError,RemovedItem,Iter},
 };
 
 

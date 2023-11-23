@@ -182,6 +182,12 @@ impl<K: Ord, V> MapMultiSlot<K,V> {
             flags: &self.flags,
         }
     }
+    fn filtered_iter(&self) -> MapMultiSlotFilterIterator<K,V> {
+        MapMultiSlotFilterIterator {
+            iter: self.keys.iter().zip(self.values.iter()).enumerate(),
+            flags: &self.flags,
+        }
+    }
     fn fill_in<'t>(&mut self, iter: &mut std::iter::Zip<std::vec::Drain<'t,K>,std::vec::Drain<'t,V>>) -> bool { // is exhausted
         let mut cur = 0;
         while cur < self.capacity {
@@ -195,6 +201,24 @@ impl<K: Ord, V> MapMultiSlot<K,V> {
             cur += 1;
         }
         return false;
+    }
+}
+
+struct MapMultiSlotFilterIterator<'t,K,V> {
+    iter: std::iter::Enumerate<std::iter::Zip<std::slice::Iter<'t,K>,std::slice::Iter<'t,V>>>,
+    flags: &'t Flags,
+}
+impl<'t,K,V> Iterator for MapMultiSlotFilterIterator<'t,K,V> {
+    type Item = (&'t K, &'t V);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            match self.iter.next() {
+                Some((n,(k,v))) if self.flags.get(n) => break Some((k,v)),
+                Some(_) => continue,
+                None => break None,
+            }
+        }
     }
 }
 
@@ -228,6 +252,30 @@ impl<'t,K,V> Iterator for MapMultiSlotDrainIterator<'t,K,V> {
 }
 
 
+pub struct Iter<'t,K,V> {
+    slot_iter: Option<std::slice::Iter<'t,(K,V)>>,
+    cur_data_iter: Option<MapMultiSlotFilterIterator<'t,K,V>>,
+    data_iter: Vec<MapMultiSlotFilterIterator<'t,K,V>>,
+}
+impl<'t,K,V> Iterator for Iter<'t,K,V> {
+    type Item = (&'t K, &'t V);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(iter) = &mut self.slot_iter {
+            match iter.next() {
+                Some((k,v)) => return Some((&k, &v)),
+                None => { self.slot_iter = None; },
+            }
+        }
+        while let Some(iter) = &mut self.cur_data_iter {
+            match iter.next() {
+                Some((k,v)) => return Some((k, v)),
+                None => { self.cur_data_iter = self.data_iter.pop(); },
+            }
+        }
+        None
+    }
+}
 
 
 const CURRENT_CIVS_MAP_VERSION: (u32,u32) = (0,1);
@@ -321,6 +369,22 @@ impl<K: Ord, V> CivMap<K,V> {
 
             tmp_merge_keys: Vec::new(),
             tmp_merge_values: Vec::new(),
+        }
+    }
+
+    pub fn filtered_iter(&self) -> Iter<K,V> {
+        let mut v = {
+            let mut v = Vec::new();
+            let n = self.data.len();
+            for i in 0 .. n {
+                v.push(self.data[n-i-1].filtered_iter());
+            }
+            v
+        };
+        Iter {
+            slot_iter: Some(self.slot.iter()),
+            cur_data_iter: v.pop(),
+            data_iter: v,            
         }
     }
 
@@ -693,6 +757,29 @@ mod tests {
         }
         println!("");
         panic!();
+    }
+
+    #[test]
+    fn test_iter() {
+        let cnt = 1_000_000;
+        let mut res = Vec::with_capacity(cnt);
+        let mut map: CivMap<u64,u32> = CivMap::new();
+        for i in 0 .. cnt {
+            map.insert(i as u64, i as u32);
+            if i % 10 != 0 {
+                res.push((i as u64, i as u32));
+            }
+        }
+        for i in 0 .. cnt {
+            if i % 10 == 0 {
+                map.remove(&(i as u64));
+            }
+        }
+
+        let mut lib = map.filtered_iter().map(|(k,v)| (*k,*v)).collect::<Vec<_>>();
+        lib.sort_by_key(|(k,_)|*k);
+
+        assert_eq!(res,lib);
     }
     
 }
