@@ -2,7 +2,18 @@
 name = "civs"
 version = "0.1.1"
 authors = ["merl <merl.001.mia@gmail.com>"]
-edition = "2018"
+edition = "2021"
+license = "MIT"
+readme = "README.md"
+description = "Controllably Increasing/Inflating VectorS"
+
+repository = "https://github.com/merl-twin/civs"
+homepage = "https://github.com/merl-twin/civs"
+
+include = [
+    "**/*.rs",
+    "Cargo.toml",
+]
 
 [features]
 debug = []
